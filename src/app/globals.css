@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --bg: #0a0f1d;
+  --surface: #111a2e;
+  --surface-2: #172341;
+  --border: #233154;
+  --text: #e9edf7;
+  --muted: #95a1c0;
+  --accent: #f5c242;
+  --accent-ink: #2a1c00;
+  --gold: #f5c242;
+  --elixir: #e07bf5;
+  --dark: #a99bff;
+  --gem: #4ade80;
+  --ore: #67c8ff;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --info: #60a5fa;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-gold: var(--gold);
+  --color-elixir: var(--elixir);
+  --color-dark: var(--dark);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-ore: var(--ore);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-lilita), var(--font-geist-sans), sans-serif;
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #1b2a55 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, #2a1c4d 0%, transparent 55%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+.card {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* NumberField has its own −/+ buttons. */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

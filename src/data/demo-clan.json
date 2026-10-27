@@ -1,0 +1,217 @@
+{
+ "tag": "#DEMO",
+ "name": "Demo Warriors",
+ "type": "inviteOnly",
+ "description": "Sample clan shown when no API key is configured.",
+ "location": {
+  "name": "India"
+ },
+ "badgeUrls": {
+  "small": "",
+  "medium": "",
+  "large": ""
+ },
+ "clanLevel": 24,
+ "clanPoints": 58210,
+ "clanBuilderBasePoints": 41022,
+ "clanCapitalPoints": 3820,
+ "requiredTrophies": 4000,
+ "warFrequency": "always",
+ "warWinStreak": 7,
+ "warWins": 512,
+ "warTies": 9,
+ "warLosses": 140,
+ "isWarLogPublic": true,
+ "warLeague": {
+  "name": "Master League I"
+ },
+ "capitalLeague": {
+  "name": "Crystal League I"
+ },
+ "members": 12,
+ "memberList": [
+  {
+   "tag": "#DEMO",
+   "name": "Sana",
+   "role": "member",
+   "townHallLevel": 15,
+   "expLevel": 279,
+   "trophies": 5899,
+   "builderBaseTrophies": 4142,
+   "clanRank": 1,
+   "donations": 3377,
+   "donationsReceived": 2108,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Aisha",
+   "role": "member",
+   "townHallLevel": 14,
+   "expLevel": 239,
+   "trophies": 5793,
+   "builderBaseTrophies": 4945,
+   "clanRank": 2,
+   "donations": 1491,
+   "donationsReceived": 864,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Vikram",
+   "role": "coLeader",
+   "townHallLevel": 18,
+   "expLevel": 193,
+   "trophies": 5749,
+   "builderBaseTrophies": 4727,
+   "clanRank": 3,
+   "donations": 1540,
+   "donationsReceived": 1265,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Dev",
+   "role": "admin",
+   "townHallLevel": 17,
+   "expLevel": 277,
+   "trophies": 5679,
+   "builderBaseTrophies": 3191,
+   "clanRank": 4,
+   "donations": 1102,
+   "donationsReceived": 1689,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Demo Chief",
+   "role": "coLeader",
+   "townHallLevel": 18,
+   "expLevel": 224,
+   "trophies": 5673,
+   "builderBaseTrophies": 3349,
+   "clanRank": 5,
+   "donations": 1824,
+   "donationsReceived": 1870,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Neha",
+   "role": "member",
+   "townHallLevel": 17,
+   "expLevel": 268,
+   "trophies": 5584,
+   "builderBaseTrophies": 4326,
+   "clanRank": 6,
+   "donations": 1993,
+   "donationsReceived": 566,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Meera",
+   "role": "member",
+   "townHallLevel": 15,
+   "expLevel": 248,
+   "trophies": 5508,
+   "builderBaseTrophies": 4005,
+   "clanRank": 7,
+   "donations": 2369,
+   "donationsReceived": 2276,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Rohan",
+   "role": "member",
+   "townHallLevel": 16,
+   "expLevel": 247,
+   "trophies": 5372,
+   "builderBaseTrophies": 3180,
+   "clanRank": 8,
+   "donations": 1096,
+   "donationsReceived": 510,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Arjun",
+   "role": "admin",
+   "townHallLevel": 17,
+   "expLevel": 214,
+   "trophies": 5089,
+   "builderBaseTrophies": 4643,
+   "clanRank": 9,
+   "donations": 3256,
+   "donationsReceived": 387,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Rahul",
+   "role": "leader",
+   "townHallLevel": 18,
+   "expLevel": 245,
+   "trophies": 5038,
+   "builderBaseTrophies": 4518,
+   "clanRank": 10,
+   "donations": 2337,
+   "donationsReceived": 245,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Kabir",
+   "role": "member",
+   "townHallLevel": 16,
+   "expLevel": 207,
+   "trophies": 4781,
+   "builderBaseTrophies": 3332,
+   "clanRank": 11,
+   "donations": 1732,
+   "donationsReceived": 758,
+   "league": {
+    "name": "Legend League"
+   }
+  },
+  {
+   "tag": "#DEMO",
+   "name": "Priya",
+   "role": "admin",
+   "townHallLevel": 18,
+   "expLevel": 252,
+   "trophies": 4724,
+   "builderBaseTrophies": 3823,
+   "clanRank": 12,
+   "donations": 1320,
+   "donationsReceived": 567,
+   "league": {
+    "name": "Legend League"
+   }
+  }
+ ],
+ "clanCapital": {
+  "capitalHallLevel": 10
+ }
+}
