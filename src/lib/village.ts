@@ -287,3 +287,37 @@ export function villageFromExport(ex: VillageExport): Village {
   if (huts > 0) village.builders = huts + bob;
   return village;
 }
+
+/**
+ * Live API data plus a saved export: buildings, helpers and running timers come from the export,
+ * heroes/troops/pets/equipment levels from the API (fresher). When the API already shows a higher
+ * level, the upgrade that was running in the export has finished, so its timer is dropped.
+ */
+export function mergeVillages(api: Village, ex: Village): Village {
+  const key = (e: Entry) => `${e.item.key}|${e.weapon ? 'w' : ''}|${e.module ?? ''}`;
+  const fromApi = new Map(api.entries.map((e) => [key(e), e]));
+  const entries: Entry[] = [];
+  const seen = new Set<string>();
+  for (const e of ex.entries) {
+    const k = key(e);
+    const a = fromApi.get(k);
+    // Several export entries share a key for buildings at different levels; the API never lists those.
+    if (!a || e.item.counts || e.module !== undefined) {
+      entries.push(e);
+      continue;
+    }
+    if (seen.has(k)) continue;
+    seen.add(k);
+    entries.push(a.level > e.level ? a : { ...e, level: Math.max(e.level, a.level) });
+  }
+  for (const [k, a] of fromApi) if (!seen.has(k) && !ex.entries.some((e) => key(e) === k)) entries.push(a);
+  return {
+    ...api,
+    source: 'export',
+    entries,
+    timestamp: ex.timestamp,
+    helpers: ex.helpers,
+    builders: ex.builders,
+    builderHall: api.builderHall || ex.builderHall,
+  };
+}

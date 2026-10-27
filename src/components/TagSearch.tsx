@@ -1,8 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { normalizeTag, tagSlug } from '@/lib/format';
+import { Segmented } from './ui/controls';
+import { buttonClass } from './ui/styles';
 
 export function TagSearch() {
   const router = useRouter();
@@ -14,7 +17,7 @@ export function TagSearch() {
     e.preventDefault();
     const tag = normalizeTag(value);
     if (!tag) {
-      setError('That does not look like a tag. Tags use only 0 2 8 9 P Y L Q G R J C U V, e.g. #2PP.');
+      setError('Tags use only 0 2 8 9 P Y L Q G R J C U V, for example #2PP.');
       return;
     }
     setError(null);
@@ -22,37 +25,42 @@ export function TagSearch() {
   };
 
   return (
-    <form onSubmit={submit} className="card w-full max-w-xl p-2">
-      <div className="mb-2 flex gap-1 p-1 text-sm">
-        {(['player', 'clan'] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMode(m)}
-            className={`flex-1 rounded-lg px-3 py-1.5 font-medium capitalize transition ${
-              mode === m ? 'bg-surface-2 text-ink' : 'text-muted hover:text-ink'
-            }`}
-          >
-            {m} tag
-          </button>
-        ))}
+    <form onSubmit={submit} className="w-full max-w-xl" role="search">
+      <div className="mb-3 flex justify-center">
+        <Segmented
+          label="Search for"
+          size="md"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'player', label: 'Player' },
+            { value: 'clan', label: 'Clan' },
+          ]}
+        />
       </div>
-      <div className="flex gap-2">
+      <div className={`flex items-center gap-2 rounded-xl border bg-panel p-1.5 pl-4 transition-colors focus-within:border-line-strong ${error ? 'border-critical' : 'border-line'}`}>
+        <Search size={18} className="shrink-0 text-ink-3" aria-hidden />
         <input
           value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder={mode === 'player' ? '#YOURTAG (Profile → tag under your name)' : '#CLANTAG'}
-          className="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 font-mono uppercase tracking-wider outline-none placeholder:font-sans placeholder:normal-case placeholder:tracking-normal focus:border-accent"
+          onChange={(e) => {
+            setValue(e.target.value);
+            setError(null);
+          }}
+          placeholder={mode === 'player' ? 'Player tag, e.g. #9Y9PGP9VP' : 'Clan tag, e.g. #2PP'}
+          aria-label={`${mode} tag`}
+          aria-invalid={!!error}
           autoCapitalize="characters"
           autoComplete="off"
           spellCheck={false}
-          aria-label={`${mode} tag`}
+          className="h-10 min-w-0 flex-1 bg-transparent font-mono text-[15px] uppercase outline-none placeholder:font-sans placeholder:normal-case placeholder:text-ink-3"
         />
-        <button type="submit" className="rounded-xl bg-accent px-5 py-3 font-semibold text-accent-ink hover:brightness-110">
+        <button type="submit" className={buttonClass('primary', 'md', 'h-10 px-5')}>
           Search
         </button>
       </div>
-      {error && <p className="px-2 pt-2 text-sm text-danger">{error}</p>}
+      <p className={`mt-2 text-left text-[13px] ${error ? 'text-critical' : 'text-ink-3'}`} aria-live="polite">
+        {error ?? 'Find your tag in the game under your name on the profile screen.'}
+      </p>
     </form>
   );
 }

@@ -38,16 +38,26 @@ export function formatPercent(x: number): string {
   return `${Math.floor(Math.max(0, Math.min(1, x)) * 1000) / 10}%`;
 }
 
+/** "12 Feb 2027" for a unix time in seconds. */
+export function formatDate(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** "12 Feb, 14:30" for a unix time in seconds. */
+export function formatDateTime(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 export const RES_STYLE: Record<Res, { label: string; color: string }> = {
-  G: { label: 'Gold', color: 'var(--gold)' },
-  E: { label: 'Elixir', color: 'var(--elixir)' },
-  D: { label: 'Dark Elixir', color: 'var(--dark)' },
-  GE: { label: 'Gold/Elixir', color: 'var(--gold)' },
-  BG: { label: 'Builder Gold', color: 'var(--gold)' },
-  BE: { label: 'Builder Elixir', color: 'var(--elixir)' },
-  BGE: { label: 'Builder Gold/Elixir', color: 'var(--gold)' },
-  GEM: { label: 'Gems', color: 'var(--gem)' },
-  ORE: { label: 'Ore', color: 'var(--ore)' },
+  G: { label: 'Gold', color: 'var(--res-gold)' },
+  E: { label: 'Elixir', color: 'var(--res-elixir)' },
+  D: { label: 'Dark Elixir', color: 'var(--res-dark)' },
+  GE: { label: 'Gold or Elixir', color: 'var(--res-gold)' },
+  BG: { label: 'Builder Gold', color: 'var(--res-gold)' },
+  BE: { label: 'Builder Elixir', color: 'var(--res-elixir)' },
+  BGE: { label: 'Builder Gold or Elixir', color: 'var(--res-gold)' },
+  GEM: { label: 'Gems', color: 'var(--res-gem)' },
+  ORE: { label: 'Ore', color: 'var(--res-ore)' },
 };
 
 const TAG_CHARS = /^[0289PYLQGRJCUV]{3,12}$/;

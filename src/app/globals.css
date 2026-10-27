@@ -2,67 +2,96 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0a0f1d;
-  --surface: #111a2e;
-  --surface-2: #172341;
-  --border: #233154;
-  --text: #e9edf7;
-  --muted: #95a1c0;
-  --accent: #f5c242;
-  --accent-ink: #2a1c00;
-  --gold: #f5c242;
-  --elixir: #e07bf5;
-  --dark: #a99bff;
-  --gem: #4ade80;
-  --ore: #67c8ff;
-  --ok: #4ade80;
-  --warn: #fbbf24;
-  --danger: #f87171;
-  --info: #60a5fa;
+  /* Surfaces: page < panel < raised. Hairline borders do the separating. */
+  --bg: #0b0c0e;
+  --panel: #111316;
+  --raised: #171a1e;
+  --hover: #1c2025;
+  --line: #22262c;
+  --line-strong: #2e333a;
+  /* Ink */
+  --ink: #eceef0;
+  --ink-2: #b2b8c1;
+  --ink-3: #7c8490;
+  /* Brand: Clash gold, used sparingly (logo, active tab, focus). */
+  --brand: #e8b13a;
+  --focus: #e8b13a;
+  /* Resources (identity dots next to numbers, never text color). */
+  --res-gold: #e8b13a;
+  --res-elixir: #c36be0;
+  --res-dark: #8e7cf0;
+  --res-gem: #3fbf7f;
+  --res-ore: #5bb8f5;
+  /* Status: always with an icon or label. */
+  --good: #3fb950;
+  --warning: #d29922;
+  --critical: #f0524a;
+  --info: #58a6ff;
+  /* Chart categorical slots (dark steps, validated on --panel). */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-muted: #3b4048;
+  --grid: #1f2328;
+  --axis: #353a42;
+  --jam: rgba(232, 177, 58, 0.09);
+  --jam-edge: rgba(232, 177, 58, 0.45);
 }
 
 @theme inline {
   --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-line: var(--border);
-  --color-ink: var(--text);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-gold: var(--gold);
-  --color-elixir: var(--elixir);
-  --color-dark: var(--dark);
-  --color-ok: var(--ok);
-  --color-warn: var(--warn);
-  --color-danger: var(--danger);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-brand: var(--brand);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
   --color-info: var(--info);
-  --color-ore: var(--ore);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-lilita), var(--font-geist-sans), sans-serif;
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+html {
+  background: var(--bg);
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 10% -10%, #1b2a55 0%, transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, #2a1c4d 0%, transparent 55%),
-    var(--bg);
-  background-attachment: fixed;
-  color: var(--text);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-.card {
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 1rem;
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
-.num {
+::selection {
+  background: rgba(232, 177, 58, 0.3);
+}
+
+/* Columns of numbers line up; big standalone figures keep proportional digits. */
+.tnum {
   font-variant-numeric: tabular-nums;
 }
 
-/* NumberField has its own −/+ buttons. */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;
@@ -71,4 +100,24 @@ input[type='number']::-webkit-inner-spin-button,
 input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .drawer-in {
+    animation: drawer-in 180ms ease-out;
+  }
+  .fade-in {
+    animation: fade-in 140ms ease-out;
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
 }

@@ -45,10 +45,17 @@ async function PlayerContent({ raw }: { raw: string }) {
 function ProfileSkeleton() {
   return (
     <div className="animate-pulse space-y-4" aria-label="Loading player">
-      <div className="card h-48" />
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="card h-64" />
-        <div className="card h-96" />
+      <div className="flex items-center gap-4 pb-4">
+        <div className="h-16 w-16 rounded-xl bg-panel" />
+        <div className="space-y-2">
+          <div className="h-6 w-48 rounded bg-panel" />
+          <div className="h-4 w-72 rounded bg-panel" />
+        </div>
+      </div>
+      <div className="h-11 border-b border-line" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[5fr_7fr]">
+        <div className="h-64 rounded-xl border border-line bg-panel" />
+        <div className="h-64 rounded-xl border border-line bg-panel" />
       </div>
     </div>
   );

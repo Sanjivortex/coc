@@ -1,11 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { ClipboardPaste, FileUp, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNow, useStoredJson } from '@/lib/client-store';
 import { formatDuration, tagSlug } from '@/lib/format';
 import { ExportParseError, parseExport, villageFromExport } from '@/lib/village';
-import { VillageView } from './village/VillageView';
+import { Dashboard } from './dashboard/Dashboard';
+import { Button } from './ui/controls';
+import { buttonClass } from './ui/styles';
 
 type Saved = Record<string, { text: string; savedAt: number }>;
 
@@ -15,6 +18,7 @@ export function TrackerClient() {
   const [storedExports, setSaved] = useStoredJson<Saved>('coc-stats:exports');
   const [selected, setSelected] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState(false);
   const now = useNow();
 
   const saved = useMemo(() => storedExports ?? {}, [storedExports]);
@@ -50,6 +54,7 @@ export function TrackerClient() {
       setSelected(ex.tag);
       setText('');
       setError(null);
+      setEditing(false);
     } catch (e) {
       setError(e instanceof ExportParseError ? e.message : 'Could not read this export.');
     }
@@ -59,7 +64,7 @@ export function TrackerClient() {
     try {
       importText(await navigator.clipboard.readText());
     } catch {
-      setError('Clipboard access was blocked. Paste into the box instead (long-press → Paste).');
+      setError('Clipboard access was blocked. Paste into the box instead.');
     }
   };
 
@@ -70,80 +75,106 @@ export function TrackerClient() {
     if (selected === tag) setSelected(null);
   };
 
+  const showForm = !village || editing;
+
   return (
-    <div className="space-y-4">
-      <section className="card p-5">
-        <h1 className="font-display text-3xl tracking-wide">Upgrade Tracker</h1>
-        <p className="mt-1 text-sm text-muted">
-          In the game: <span className="text-ink">Settings → More Settings → Data Export → Copy</span>. Then paste it here. The export stays in
-          your browser.
-        </p>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder='{"tag":"#…","timestamp":…,"buildings":[…]}'
-          className="mt-4 h-28 w-full resize-y rounded-xl border border-line bg-bg p-3 font-mono text-xs outline-none focus:border-accent"
-          spellCheck={false}
-          aria-label="Village export"
-        />
-        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => importText(text)}
-            disabled={!text.trim()}
-            className="rounded-xl bg-accent px-5 py-2.5 font-semibold text-accent-ink hover:brightness-110 disabled:opacity-40"
-          >
-            Import village
-          </button>
-          <button type="button" onClick={pasteFromClipboard} className="rounded-xl bg-surface-2 px-5 py-2.5 hover:text-accent">
-            Paste from clipboard
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              fetch('/demo-export.json')
-                .then((r) => r.text())
-                .then(importText)
-                .catch(() => setError('Could not load the demo village.'))
-            }
-            className="rounded-xl px-4 py-2.5 text-sm text-muted hover:text-ink"
-          >
-            Try a demo TH18 village
-          </button>
+    <div>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Upgrade Tracker</h1>
+          <p className="mt-1 text-[13px] text-ink-3">Every building, trap, wall and running timer from the game&apos;s village export. Saved only in this browser.</p>
         </div>
         {Object.keys(saved).length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {Object.entries(saved).map(([tag, s]) => (
-              <span key={tag} className={`flex items-center rounded-full text-xs ${tag === active ? 'bg-accent text-accent-ink' : 'bg-surface-2'}`}>
-                <button type="button" onClick={() => setSelected(tag)} className="py-1 pl-3 pr-2 font-mono">
-                  {names[tag] ?? tag}
-                  {now && <span className="ml-1 font-sans opacity-70">· {formatDuration(now - s.savedAt / 1000)} ago</span>}
+              <span key={tag} className={`flex items-center rounded-lg border text-[13px] ${tag === active ? 'border-line-strong bg-raised text-ink' : 'border-line text-ink-2'}`}>
+                <button type="button" onClick={() => setSelected(tag)} className="py-1 pl-3 pr-2">
+                  {names[tag] ?? <span className="font-mono">{tag}</span>}
+                  {now && <span className="ml-1.5 text-xs text-ink-3">{formatDuration(now - s.savedAt / 1000)} ago</span>}
                 </button>
-                <button type="button" onClick={() => remove(tag)} className="py-1 pr-3 opacity-70 hover:opacity-100" aria-label={`Remove ${tag}`}>
-                  ×
+                <button type="button" onClick={() => remove(tag)} className="py-1 pr-2 text-ink-3 hover:text-critical" aria-label={`Remove ${tag}`}>
+                  <X size={14} />
                 </button>
               </span>
             ))}
+            {!showForm && (
+              <Button size="sm" onClick={() => setEditing(true)}>
+                <FileUp size={14} aria-hidden /> Import another
+              </Button>
+            )}
           </div>
         )}
-      </section>
+      </div>
+
+      {showForm && (
+        <section className="mb-6 grid gap-6 rounded-xl border border-line bg-panel p-5 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder='Paste the copied text here: {"tag":"#…","timestamp":…,"buildings":[…]}'
+              className="h-32 w-full resize-y rounded-lg border border-line bg-bg p-3 font-mono text-xs outline-none placeholder:font-sans placeholder:text-ink-3 focus:border-line-strong"
+              spellCheck={false}
+              aria-label="Village export"
+            />
+            {error && <p className="mt-2 text-[13px] text-critical">{error}</p>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => importText(text)} disabled={!text.trim()}>
+                Import village
+              </Button>
+              <Button onClick={pasteFromClipboard}>
+                <ClipboardPaste size={16} aria-hidden /> Paste from clipboard
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  fetch('/demo-export.json')
+                    .then((r) => r.text())
+                    .then(importText)
+                    .catch(() => setError('Could not load the demo village.'))
+                }
+              >
+                <Sparkles size={16} aria-hidden /> Try a demo TH18 village
+              </Button>
+              {village && (
+                <Button variant="ghost" onClick={() => setEditing(false)}>
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </div>
+          <ol className="space-y-2.5 text-[13px] text-ink-2 lg:border-l lg:border-line lg:pl-6">
+            {['Open Settings in Clash of Clans', 'Tap More Settings', 'Scroll to Data Export, tap Copy', 'Paste it here'].map((s, i) => (
+              <li key={s} className="flex items-center gap-3">
+                <span className="tnum grid h-6 w-6 shrink-0 place-items-center rounded-full border border-line bg-raised text-xs">{i + 1}</span>
+                {s}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {village && (
-        <>
-          <section className="card flex flex-wrap items-center gap-x-4 gap-y-1 p-4 text-sm">
-            <span className="font-display text-2xl tracking-wide">{names[village.tag] ?? village.tag}</span>
-            <span className="text-muted">
-              <span className="font-mono">{village.tag}</span> · TH{village.townHall}
-              {village.builderHall > 0 && ` · BH${village.builderHall}`}
-              {village.timestamp && now && ` · exported ${formatDuration(now - village.timestamp)} ago`}
-            </span>
-            <Link href={`/player/${tagSlug(village.tag)}`} className="ml-auto text-accent underline-offset-4 hover:underline">
-              Live profile →
-            </Link>
-          </section>
-          <VillageView key={village.tag} village={village} />
-        </>
+        <Dashboard
+          key={village.tag}
+          village={village}
+          notice={
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-panel px-4 py-2.5 text-[13px] text-ink-2">
+              <span>
+                <span className="font-medium text-ink">{names[village.tag] ?? village.tag}</span>
+                <span className="mx-2" aria-hidden>
+                  ·
+                </span>
+                Town Hall {village.townHall}
+                {village.builderHall > 0 && ` · Builder Hall ${village.builderHall}`}
+                {village.timestamp && now && ` · copied ${formatDuration(now - village.timestamp)} ago`}
+              </span>
+              <Link href={`/player/${tagSlug(village.tag)}`} className={buttonClass('ghost', 'sm')}>
+                Live profile
+              </Link>
+            </div>
+          }
+        />
       )}
     </div>
   );

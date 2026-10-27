@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { itemByKey } from './gamedata';
 import { formatCompact, normalizeTag } from './format';
-import { DAY, DEFAULT_SETTINGS, HOUR, buildChains, chainCost, chainTime, planVillage, type PlanSettings } from './planner';
-import { parseExport, villageFromApi, villageFromExport, type ApiPlayer, type Village } from './village';
+import {
+  DAY,
+  DEFAULT_SETTINGS,
+  HOUR,
+  buildChains,
+  chainCost,
+  customChains,
+  limitChain,
+  planVillage,
+  simulateChain,
+  type PlanSettings,
+  type ScenarioId,
+} from './planner';
+import { mergeVillages, parseExport, villageFromApi, villageFromExport, type ApiPlayer, type Village } from './village';
 
 const settings = (patch: Partial<PlanSettings> = {}): PlanSettings => ({ ...DEFAULT_SETTINGS, ...patch });
 
@@ -32,32 +44,40 @@ describe('Archer Queen 97 → 110 at TH18', () => {
     expect(chainCost(c).D).toBe(5_600_000);
   });
 
-  it('applies the Gold Pass boost', () => {
-    expect(chainTime(queenChain(), settings({ goldPass: 0.2 }))).toBeCloseTo(104 * 0.8 * DAY, 0);
+  const time = (s: PlanSettings, scenario: ScenarioId) => simulateChain(queenChain(), s, scenario).makespan;
+
+  it('applies the Gold Pass boost only in Gold Pass scenarios', () => {
+    expect(time(settings(), 'normal')).toBeCloseTo(104 * DAY, 0);
+    expect(time(settings({ goldPass: 0.2 }), 'gold')).toBeCloseTo(104 * 0.8 * DAY, 0);
   });
 
   it('halves only the upgrades started during a 15 day Hammer Jam', () => {
-    const s = settings({ hammerJam: { enabled: true, startDays: 0, days: 15, discount: 0.5 } });
     // Upgrades start on day 0, 4, 8 and 12 at half time, the other 9 take the full 8 days.
-    expect(chainTime(queenChain(), s)).toBeCloseTo(88 * DAY, 0);
-    expect(chainTime(queenChain(), s, { jam: 'always' })).toBeCloseTo(52 * DAY, 0);
+    expect(time(settings(), 'jam')).toBeCloseTo(88 * DAY, 0);
+    // With a 20% Gold Pass too: 6.4-day upgrades, halved to 3.2 for the 5 that start inside the event.
+    expect(time(settings(), 'jamGold')).toBeCloseTo((5 * 3.2 + 8 * 6.4) * DAY, 0);
   });
 
   it('counts the Builder’s Apprentice as extra hours every day', () => {
-    const t = chainTime(queenChain(), settings({ apprentice: 8 }));
+    const t = time(settings({ apprentice: 8 }), 'normal');
     expect(t / DAY).toBeGreaterThan(77.5);
     expect(t / DAY).toBeLessThan(78.5);
   });
 
   it('saves 9 hours per builder potion and a full level per hammer', () => {
-    const chains = heroChains(queenVillage(), 'archer-queen');
-    const base = planVillage(chains, settings({ builders: 1 })).builder.makespan;
-    expect(base).toBeCloseTo(104 * DAY, 0);
-    const potions = planVillage(chains, settings({ builders: 1, builderPotions: 5 })).builder.makespan;
-    expect(base - potions).toBeCloseTo(45 * HOUR, 0);
-    const hammers = planVillage(chains, settings({ builders: 1, hammers: { heroes: 2, building: 0, fighting: 0, spells: 0 } }));
-    expect(hammers.builder.makespan).toBeCloseTo(88 * DAY, 0);
-    expect(hammers.builder.cost.D).toBe(5_600_000 - 490_000 - 485_000);
+    expect(time(settings(), 'normal') - time(settings({ builderPotions: 5 }), 'items')).toBeCloseTo(45 * HOUR, 0);
+    const hammers = settings({ hammers: { heroes: 2, building: 0, fighting: 0, spells: 0 } });
+    const plan = planVillage([queenChain()], { ...hammers, builders: 1 }, 'items');
+    expect(plan.builder.makespan).toBeCloseTo(88 * DAY, 0);
+    expect(plan.builder.cost.D).toBe(5_600_000 - 490_000 - 485_000);
+    // Inventory only counts in the potions scenarios.
+    expect(planVillage([queenChain()], { ...hammers, builders: 1 }, 'normal').builder.makespan).toBeCloseTo(104 * DAY, 0);
+  });
+
+  it('stops at a lower target level', () => {
+    const c = limitChain(queenChain(), 3);
+    expect(c.to).toBe(100);
+    expect(simulateChain(c, settings(), 'normal').makespan).toBe(24 * DAY);
   });
 });
 
@@ -71,6 +91,28 @@ describe('planVillage', () => {
     expect(plan.builder.chainEnd.get(king.id)).toBe(king.remainingTime);
     expect(plan.builder.makespan).toBeCloseTo(104 * DAY, 0);
     expect(planVillage(chains, settings({ builders: 1 })).builder.makespan).toBeCloseTo(104 * DAY + king.remainingTime, 0);
+  });
+
+  it('gives the Goblin Builder its own row and only lets it start jobs while it is around', () => {
+    const v = queenVillage();
+    const heroes = buildChains(v).filter((c) => c.item.kind === 'hero' && c.base === 'home');
+    const inferno = customChains(v, itemByKey('home:inferno-tower')!, 10, 1, 'custom');
+    const chains = [...heroes, ...inferno];
+    // 6 heroes on 6 builders + the Inferno Tower on the Goblin Builder.
+    const plan = planVillage(chains, settings({ builders: 6, goblinBuilder: true }));
+    expect(plan.builder.workerRows).toBe(7);
+    const goblinJobs = plan.builder.timeline.filter((s) => s.worker === 6);
+    expect(goblinJobs.length).toBeGreaterThan(0);
+    const longestHero = Math.max(...heroes.map((c) => c.remainingTime));
+    expect(plan.builder.makespan).toBeCloseTo(Math.max(longestHero, inferno[0].remainingTime), 0);
+    // A Goblin Builder that leaves on day 1 starts one upgrade at most, then the regular builders take over.
+    const short = planVillage(chains, settings({ builders: 6, goblinBuilder: true, goblinDays: 1 }));
+    expect(short.builder.timeline.filter((s) => s.worker === 6).every((s) => s.start < DAY)).toBe(true);
+  });
+
+  it('marks upgrades that start during Hammer Jam', () => {
+    const plan = planVillage([queenChain()], settings({ builders: 1 }), 'jam');
+    expect(plan.builder.timeline.filter((s) => s.jam).map((s) => s.level)).toEqual([98, 99, 100, 101]);
   });
 });
 
@@ -170,6 +212,36 @@ describe('in-game export', () => {
   it('rejects text that is not an export', () => {
     expect(() => parseExport('hello')).toThrow();
     expect(() => parseExport('{"foo":1}')).toThrow();
+  });
+
+  it('merges a saved export into the live profile', () => {
+    const ex = villageFromExport(parseExport(text));
+    const api = villageFromApi({
+      tag: '#PQL0289',
+      name: 'Tester',
+      townHallLevel: 17,
+      townHallWeaponLevel: 3,
+      expLevel: 250,
+      trophies: 0,
+      bestTrophies: 0,
+      warStars: 0,
+      attackWins: 0,
+      defenseWins: 0,
+      donations: 0,
+      donationsReceived: 0,
+      // The queen finished the upgrade that was running in the export; the barbarian is unchanged.
+      heroes: [{ name: 'Archer Queen', level: 100, maxLevel: 110, village: 'home' }],
+      troops: [{ name: 'Barbarian', level: 12, maxLevel: 13, village: 'home' }],
+    });
+    const merged = mergeVillages(api, ex);
+    expect(merged.name).toBe('Tester');
+    expect(merged.source).toBe('export');
+    const chains = buildChains(merged, { now: 1_800_000_000 });
+    const queen = chains.find((c) => c.item.id === 'archer-queen')!;
+    expect(queen.from).toBe(100);
+    expect(queen.firstRemaining).toBeUndefined();
+    expect(chains.filter((c) => c.item.id === 'inferno-tower')).toHaveLength(3);
+    expect(merged.entries.filter((e) => e.item.id === 'town-hall')).toHaveLength(2); // hall + weapon, no duplicates
   });
 });
 
