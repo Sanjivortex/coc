@@ -129,6 +129,8 @@ else
   chown "$APP_USER:$APP_USER" "$APP_DIR"
   as_app git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
+# Everything below (npm especially) runs inside the app, not in the caller's directory.
+cd "$APP_DIR"
 
 if [ ! -s "$ENV_FILE" ]; then
   log "Clash of Clans API token"
