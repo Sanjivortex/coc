@@ -39,6 +39,28 @@ npm run dev                  # http://localhost:3000
 
 Player and clan responses are cached for 5 minutes (`'use cache'` in `src/lib/coc-api.ts`).
 
+## Deploy on a VPS with Caddy
+
+1. DNS: add an `A` record for the subdomain (e.g. `coc`) pointing to the VPS IP.
+2. Create the API key on developer.clashofclans.com with the VPS IP.
+3. On the VPS (Ubuntu/Debian, as root):
+
+   ```bash
+   # Look first: lists the sites Caddy serves, ports in use and DNS. Changes nothing.
+   curl -fsSL https://raw.githubusercontent.com/Sanjivortex/coc/main/deploy/setup-vps.sh | sudo bash -s -- --check coc.test-hub.xyz
+   # Install, or update later with the same command:
+   curl -fsSL https://raw.githubusercontent.com/Sanjivortex/coc/main/deploy/setup-vps.sh | sudo bash -s -- coc.test-hub.xyz
+   ```
+
+[`deploy/setup-vps.sh`](deploy/setup-vps.sh) installs Node.js 22 privately in `/opt/coc-node` (other
+apps keep their Node), clones the repo to `/opt/coc` as a `coc` system user, asks for the API token
+once (checks it directly and through the RoyaleAPI proxy, then writes `.env.local`), builds, runs the
+app as the `coc` systemd service on the first free port from 3000 (localhost only), and appends one
+site block to `/etc/caddy/Caddyfile` after a backup. If `caddy validate` fails, the original
+Caddyfile is put back. Caddy then gets the HTTPS certificate on its own.
+
+Logs: `journalctl -u coc -f`. If the build gets killed on a 1 GB VPS, add swap and run it again.
+
 ## Where the data comes from
 
 - **Official API** (`GET /v1/players/{tag}`): heroes, hero equipment, pets, troops, spells, siege
