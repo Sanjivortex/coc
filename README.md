@@ -99,14 +99,20 @@ Boosts:
 | Builder's Apprentice / Lab Assistant | level L = L hours extra progress, once per day, on the longest running upgrade |
 | Hammer | skips one level for free (goes to the longest, then most expensive, step) |
 | Book | finishes a running upgrade (time only, cost still paid) |
-| Hammer Jam | upgrades **started** inside the event window cost and take 50% (configurable); potions are spent at the event start |
+| Hammer Jam | upgrades **started** between the event's start and end dates cost and take 50% (configurable); potions are spent at the event start |
 
 Example (unit-tested): Archer Queen 97 → 110 at TH18 is 13 upgrades × 8 days = **104 days** and
 5.6M Dark Elixir; 83.2 days with a 20% Gold Pass; 88 days with a 15-day Hammer Jam starting today
 (four upgrades start inside the event); 52 days if every upgrade got the Hammer Jam price.
 
-These are estimates: the simulation does not model resource income, building prerequisites inside
-the same Town Hall (e.g. Laboratory level before troop levels) or Goblin Builder events.
+The **Hammer Jam** tab plans the event itself: enter its start and end, Gold Pass, potions, builders
+(plus a Goblin Builder) and which builder the Apprentice helps, then give every builder one thing to
+work on (a hero, every copy of a building, or "auto"). Each builder starts the next level as soon as
+the last one is done, and the tab shows the level each one reaches with every upgrade it starts
+before the event ends, next to what the same builders would reach without the event.
+
+These are estimates: the simulation does not model resource income or building prerequisites inside
+the same Town Hall (e.g. Laboratory level before troop levels).
 
 ## Scripts
 

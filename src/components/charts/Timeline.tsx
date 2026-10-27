@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DAY } from '@/lib/planner';
 
 export interface TimelineBar {
@@ -32,8 +32,8 @@ interface Props {
 const ROW_H = 30;
 const BAR_H = 14;
 
-function tickStep(spanDays: number): number {
-  for (const step of [1, 2, 7, 14, 30, 60, 90, 180, 365]) if (spanDays / step <= 8) return step;
+function tickStep(spanDays: number, maxTicks: number): number {
+  for (const step of [1, 2, 7, 14, 30, 60, 90, 180, 365]) if (spanDays / step <= maxTicks) return step;
   return 730;
 }
 
@@ -43,10 +43,20 @@ function tickStep(spanDays: number): number {
  */
 export function Timeline({ rows, bars, span, jam, now, legend, ariaLabel }: Props) {
   const [hover, setHover] = useState<TimelineBar | null>(null);
+  // Date labels need ~72px each, so narrow charts (phones, the drawer) get fewer ticks.
+  const plot = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const el = plot.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const total = Math.max(span, DAY);
   const x = (t: number) => `${(Math.max(0, Math.min(t, total)) / total) * 100}%`;
   const spanDays = total / DAY;
-  const step = tickStep(spanDays);
+  const step = tickStep(spanDays, width > 0 ? Math.max(2, Math.floor(width / 72)) : 8);
   const ticks: number[] = [];
   for (let d = 0; d <= spanDays + 1e-9; d += step) ticks.push(d);
   const tickLabel = (d: number) =>
@@ -79,7 +89,7 @@ export function Timeline({ rows, bars, span, jam, now, legend, ariaLabel }: Prop
             </div>
           ))}
         </div>
-        <div className="relative min-w-0">
+        <div ref={plot} className="relative min-w-0">
           {/* Hammer Jam label row */}
           <div className="relative h-6">
             {jam && jam.end > 0 && jam.start < total && (

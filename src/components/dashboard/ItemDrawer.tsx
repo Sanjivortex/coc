@@ -4,13 +4,13 @@ import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { formatCompact, formatDate, formatDateTime, formatDuration } from '@/lib/format';
 import { KIND_LABEL } from '@/lib/gamedata';
-import { SCENARIOS, applyMagicItems, limitChain, scenarioFlags, simulateChain, type PlanSettings, type ScenarioId } from '@/lib/planner';
+import { SCENARIOS, applyMagicItems, jamWindow, limitChain, scenarioFlags, simulateChain, type PlanSettings, type ScenarioId } from '@/lib/planner';
 import { Timeline, type TimelineBar } from '../charts/Timeline';
-import { Field, Segmented, Stepper } from '../ui/controls';
+import { DateInput, Field, Segmented, Stepper } from '../ui/controls';
 import { Drawer } from '../ui/Drawer';
 import { Badge, CostList, Ore } from '../ui/display';
 import { ScenarioTable } from './ScenarioTable';
-import { groupImage, groupStats, inventoryHint, isTimed, levelText, type ItemGroup } from './model';
+import { groupImage, groupStats, isTimed, levelText, scenarioHint, type ItemGroup } from './model';
 
 const POTIONS = {
   builder: { key: 'builderPotions', label: 'Builder Potions', hint: '≈ 9h each while it upgrades' },
@@ -52,8 +52,8 @@ export function ItemDrawer({
   const queue = item.queue as 'builder' | 'lab' | 'pet';
 
   const results = useMemo(
-    () => (isTimed(item) ? SCENARIOS.map((s) => ({ ...s, res: simulateChain(limited, settings, s.id) })) : []),
-    [item, limited, settings],
+    () => (isTimed(item) ? SCENARIOS.map((s) => ({ ...s, res: simulateChain(limited, settings, s.id, now ?? 0) })) : []),
+    [item, limited, settings, now],
   );
   const activeId = boosted ? scenario : 'normal';
   const active = results.find((r) => r.id === activeId);
@@ -83,7 +83,7 @@ export function ItemDrawer({
     };
   });
   const span = Math.max(normal?.res.makespan ?? 0, active?.res.makespan ?? 0);
-  const jam = flags.jam ? { start: settings.hammerJam.startDays * 86400, end: (settings.hammerJam.startDays + settings.hammerJam.days) * 86400 } : undefined;
+  const jam = flags.jam ? jamWindow(settings, now ?? 0) : undefined;
   const gp = flags.gold && queue !== 'pet' ? 1 - settings.goldPass : 1;
 
   const setNum = (key: keyof PlanSettings, v: number) => onSettings({ ...settings, [key]: v });
@@ -171,11 +171,11 @@ export function ItemDrawer({
                     />
                   </Field>
                 )}
-                <Field label="Hammer Jam" hint="Starts in · lasts (days)">
-                  <span className="flex gap-1.5">
-                    <Stepper label="Hammer Jam starts in days" value={settings.hammerJam.startDays} max={365} onChange={(v) => onSettings({ ...settings, hammerJam: { ...settings.hammerJam, startDays: v } })} />
-                    <Stepper label="Hammer Jam length in days" value={settings.hammerJam.days} min={1} max={60} onChange={(v) => onSettings({ ...settings, hammerJam: { ...settings.hammerJam, days: v } })} />
-                  </span>
+                <Field label="Hammer Jam starts">
+                  <DateInput label="Hammer Jam starts" value={settings.hammerJam.start} onChange={(v) => onSettings({ ...settings, hammerJam: { ...settings.hammerJam, start: v } })} />
+                </Field>
+                <Field label="Hammer Jam ends">
+                  <DateInput label="Hammer Jam ends" value={settings.hammerJam.end} onChange={(v) => onSettings({ ...settings, hammerJam: { ...settings.hammerJam, end: v } })} />
                 </Field>
               </>
             )}
@@ -188,7 +188,7 @@ export function ItemDrawer({
               Time to {limited.scTo > 0 ? `supercharge ${limited.scTo}` : `level ${limited.to}`}
             </h3>
             <ScenarioTable
-              rows={results.map((r) => ({ id: r.id, label: r.label, time: r.res.makespan, cost: r.res.cost, hint: inventoryHint(settings, r.id, 'above') }))}
+              rows={results.map((r) => ({ id: r.id, label: r.label, time: r.res.makespan, cost: r.res.cost, hint: scenarioHint(settings, r.id, now, 'above') }))}
               active={scenario}
               onSelect={onScenario}
               now={now}

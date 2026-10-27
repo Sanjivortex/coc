@@ -43,6 +43,11 @@ export function formatDate(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/** "12 Feb" for a unix time in seconds. */
+export function formatDay(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 /** "12 Feb, 14:30" for a unix time in seconds. */
 export function formatDateTime(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });

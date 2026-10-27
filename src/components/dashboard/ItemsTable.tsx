@@ -22,11 +22,13 @@ export function ItemsTable({
   groups,
   scenario,
   settings,
+  now,
   onOpen,
 }: {
   groups: ItemGroup[];
   scenario: ScenarioId;
   settings: PlanSettings;
+  now?: number;
   onOpen: (g: ItemGroup) => void;
 }) {
   const rows = useMemo<Row[]>(
@@ -39,14 +41,14 @@ export function ItemsTable({
           cost = {};
           for (const c of group.chains) {
             if (c.steps.length === 0) continue;
-            const r = simulateChain(c, settings, scenario);
+            const r = simulateChain(c, settings, scenario, now ?? 0);
             time += r.makespan;
             for (const [res, v] of Object.entries(r.cost) as [Res, number][]) cost[res] = (cost[res] ?? 0) + v;
           }
         }
         return { group, stats, img: groupImage(group, stats), time, cost };
       }),
-    [groups, scenario, settings],
+    [groups, scenario, settings, now],
   );
 
   return (

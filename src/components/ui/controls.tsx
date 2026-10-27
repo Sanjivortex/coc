@@ -84,6 +84,35 @@ export function Stepper({
   );
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** Unix seconds shown in the viewer's time zone; without `withTime` the time of day is kept on change. */
+export function DateInput({ value, onChange, label, withTime = false }: { value: number; onChange: (v: number) => void; label: string; withTime?: boolean }) {
+  const d = new Date(value * 1000);
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return (
+    <input
+      type={withTime ? 'datetime-local' : 'date'}
+      aria-label={label}
+      value={withTime ? `${date}T${pad(d.getHours())}:${pad(d.getMinutes())}` : date}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (!v) return;
+        let next: Date;
+        if (withTime) next = new Date(v);
+        else {
+          const [y, m, day] = v.split('-').map(Number);
+          next = new Date(value * 1000);
+          next.setFullYear(y, m - 1, day);
+        }
+        const t = next.getTime();
+        if (Number.isFinite(t)) onChange(Math.round(t / 1000));
+      }}
+      className="tnum h-8 rounded-lg border border-line bg-bg px-2 text-[13px] text-ink outline-none focus-visible:border-line-strong"
+    />
+  );
+}
+
 export function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button

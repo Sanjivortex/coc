@@ -9,7 +9,7 @@ import type { Village } from '@/lib/village';
 import { buttonClass } from '../ui/styles';
 import { CostList, Panel, ProgressBar } from '../ui/display';
 import { ScenarioTable } from './ScenarioTable';
-import { TAB_SECTIONS, inSection, inventoryHint, type TabId } from './model';
+import { TAB_SECTIONS, inSection, scenarioHint, type ListTabId, type TabId } from './model';
 
 function mergeCost(...costs: Partial<Record<Res, number>>[]): Partial<Record<Res, number>> {
   const out: Partial<Record<Res, number>> = {};
@@ -17,7 +17,7 @@ function mergeCost(...costs: Partial<Record<Res, number>>[]): Partial<Record<Res
   return out;
 }
 
-const PROGRESS_ROWS: { tab: Exclude<TabId, 'overview' | 'planner'>; title: string }[] = [
+const PROGRESS_ROWS: { tab: ListTabId; title: string }[] = [
   { tab: 'heroes', title: 'Heroes' },
   { tab: 'pets', title: 'Pets' },
   { tab: 'equipment', title: 'Hero equipment' },
@@ -99,7 +99,7 @@ export function OverviewTab({
               label: s.label,
               time: plans[s.id].homeTotal,
               cost: mergeCost(plans[s.id].builder.cost, plans[s.id].lab.cost, plans[s.id].pet.cost),
-              hint: inventoryHint(settings, s.id),
+              hint: scenarioHint(settings, s.id, now),
             }))}
             active={scenario}
             onSelect={onScenario}

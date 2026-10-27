@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { DEFAULT_SETTINGS, type PlanSettings } from '@/lib/planner';
-import { Button, Field, Segmented, Stepper, Switch } from '../ui/controls';
+import { Button, DateInput, Field, Segmented, Stepper, Switch } from '../ui/controls';
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -55,11 +55,11 @@ export function BoostsPanel({ settings, onChange, showBuildingOptions }: { setti
           <Field label="Gold Pass boost" hint="Builder & research time and cost">
             <Segmented label="Gold Pass boost" value={settings.goldPass} options={GOLD_OPTIONS} onChange={(v) => set('goldPass', v)} />
           </Field>
-          <Field label="Hammer Jam starts in" hint="Days from today">
-            <Stepper label="Hammer Jam starts in days" value={jam.startDays} max={365} onChange={(v) => set('hammerJam', { ...jam, startDays: v })} />
+          <Field label="Hammer Jam starts">
+            <DateInput label="Hammer Jam starts" value={jam.start} onChange={(v) => set('hammerJam', { ...jam, start: v })} />
           </Field>
-          <Field label="Hammer Jam lasts" hint="Past events: 14–18 days">
-            <Stepper label="Hammer Jam length in days" value={jam.days} min={1} max={60} onChange={(v) => set('hammerJam', { ...jam, days: v })} />
+          <Field label="Hammer Jam ends" hint="Past events: 12–18 days">
+            <DateInput label="Hammer Jam ends" value={jam.end} onChange={(v) => set('hammerJam', { ...jam, end: v })} />
           </Field>
           <Field label="Hammer Jam discount" hint="Time and cost">
             <Segmented label="Hammer Jam discount" value={jam.discount} options={JAM_OPTIONS} onChange={(v) => set('hammerJam', { ...jam, discount: v })} />

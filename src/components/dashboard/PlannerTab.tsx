@@ -4,13 +4,13 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { formatDate, formatDateTime, formatDuration } from '@/lib/format';
 import { ITEMS, itemByKey, itemMaxLevel } from '@/lib/gamedata';
-import { SCENARIOS, planVillage, scenarioFlags, type Chain, type PlanSettings, type ScenarioId } from '@/lib/planner';
+import { SCENARIOS, jamWindow, planVillage, scenarioFlags, type Chain, type PlanSettings, type ScenarioId } from '@/lib/planner';
 import type { Village } from '@/lib/village';
 import { Timeline, type TimelineBar } from '../charts/Timeline';
 import { Button, Segmented, Stepper } from '../ui/controls';
 import { EmptyState, Panel } from '../ui/display';
 import { ScenarioTable } from './ScenarioTable';
-import { categoryOf, groupChains, inventoryHint, type ItemGroup } from './model';
+import { categoryOf, groupChains, scenarioHint, type ItemGroup } from './model';
 
 export interface CustomUpgrade {
   id: string;
@@ -63,8 +63,8 @@ export function PlannerTab({
   const selectedKeys = useMemo(() => picked[queue] ?? new Set(groups.map((g) => g.key)), [picked, queue, groups]);
   const selectedChains = useMemo(() => groups.filter((g) => selectedKeys.has(g.key)).flatMap((g) => g.chains), [groups, selectedKeys]);
   const plans = useMemo(
-    () => Object.fromEntries(SCENARIOS.map((s) => [s.id, planVillage(selectedChains, settings, s.id)[queue]])) as Record<ScenarioId, ReturnType<typeof planVillage>['builder']>,
-    [selectedChains, settings, queue],
+    () => Object.fromEntries(SCENARIOS.map((s) => [s.id, planVillage(selectedChains, settings, s.id, now ?? 0)[queue]])) as Record<ScenarioId, ReturnType<typeof planVillage>['builder']>,
+    [selectedChains, settings, queue, now],
   );
   const result = plans[scenario];
   const flags = scenarioFlags(scenario);
@@ -101,7 +101,7 @@ export function PlannerTab({
     .sort((a, b) => CATEGORY_ORDER.indexOf(a.id) - CATEGORY_ORDER.indexOf(b.id))
     .map((c) => ({ label: c.label, color: c.color }));
   const span = Math.max(plans.normal.makespan, result.makespan);
-  const jam = flags.jam ? { start: settings.hammerJam.startDays * 86400, end: (settings.hammerJam.startDays + settings.hammerJam.days) * 86400 } : undefined;
+  const jam = flags.jam ? jamWindow(settings, now ?? 0) : undefined;
   const schedule = showAll ? result.timeline : result.timeline.slice(0, 25);
 
   const byCategory = new Map<string, { label: string; groups: ItemGroup[] }>();
@@ -171,7 +171,7 @@ export function PlannerTab({
             <EmptyState title="Nothing selected">Pick upgrades on the left to see how long they take.</EmptyState>
           ) : (
             <ScenarioTable
-              rows={SCENARIOS.map((s) => ({ id: s.id, label: s.label, time: plans[s.id].makespan, cost: plans[s.id].cost, hint: inventoryHint(settings, s.id) }))}
+              rows={SCENARIOS.map((s) => ({ id: s.id, label: s.label, time: plans[s.id].makespan, cost: plans[s.id].cost, hint: scenarioHint(settings, s.id, now) }))}
               active={scenario}
               onSelect={onScenario}
               now={now}
@@ -204,7 +204,7 @@ export function PlannerTab({
                 <tbody>
                   {schedule.map((t, i) => (
                     <tr key={`${t.chain.id}-${t.level}-${i}`} className="border-t border-line">
-                      <td className="px-5 py-1.5">
+                      <td className="whitespace-nowrap px-5 py-1.5">
                         <span className="inline-flex items-center gap-2">
                           <span aria-hidden className="h-2 w-2 rounded-sm" style={{ background: categoryOf(t.chain).color }} />
                           {t.chain.label}
@@ -236,7 +236,7 @@ export function PlannerTab({
 }
 
 /** API profiles have no buildings: let people add the ones they plan to upgrade. */
-function AddBuilding({ village, custom, onCustom }: { village: Village; custom: CustomUpgrade[]; onCustom: (c: CustomUpgrade[]) => void }) {
+export function AddBuilding({ village, custom, onCustom }: { village: Village; custom: CustomUpgrade[]; onCustom: (c: CustomUpgrade[]) => void }) {
   const options = useMemo(
     () =>
       ITEMS.filter((i) => i.base === 'home' && i.queue === 'builder' && i.counts && i.kind !== 'wall' && itemMaxLevel(i, village.townHall) > 0).sort((a, b) =>

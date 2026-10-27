@@ -1,5 +1,5 @@
 import type { Base, Item, Kind, Res } from '@/lib/gamedata';
-import { chainCost, type Chain, type PlanSettings, type ScenarioId } from '@/lib/planner';
+import { chainCost, scenarioFlags, type Chain, type PlanSettings, type ScenarioId } from '@/lib/planner';
 
 /** All chains of one item (e.g. every Inferno Tower) shown as one row. */
 export interface ItemGroup {
@@ -88,8 +88,9 @@ export function groupImage(g: ItemGroup, stats: GroupStats): string | null {
 
 export const isTimed = (c: { queue: string }) => c.queue === 'builder' || c.queue === 'lab' || c.queue === 'pet';
 
-/** Note for the "potions" scenarios when nothing was entered in Boosts & inventory yet. */
-export function inventoryHint(s: PlanSettings, id: ScenarioId, where = 'in Boosts & inventory'): string | undefined {
+/** Note under a scenario: the Hammer Jam dates are over, or no potions were entered yet. */
+export function scenarioHint(s: PlanSettings, id: ScenarioId, now: number | undefined, where = 'in Boosts & inventory'): string | undefined {
+  if (scenarioFlags(id).jam && now !== undefined && s.hammerJam.end <= now) return 'Hammer Jam dates are over: set the next event';
   if (id !== 'items' && id !== 'jamGoldItems') return undefined;
   const any =
     s.builderPotions + s.researchPotions + s.petPotions > 0 ||
@@ -98,7 +99,8 @@ export function inventoryHint(s: PlanSettings, id: ScenarioId, where = 'in Boost
   return any ? undefined : `Add potions ${where}`;
 }
 
-export type TabId = 'overview' | 'heroes' | 'pets' | 'equipment' | 'lab' | 'buildings' | 'builder' | 'planner';
+export type TabId = 'overview' | 'heroes' | 'pets' | 'equipment' | 'lab' | 'buildings' | 'builder' | 'planner' | 'jam';
+export type ListTabId = Exclude<TabId, 'overview' | 'planner' | 'jam'>;
 
 export interface Section {
   id: string;
@@ -109,7 +111,7 @@ export interface Section {
   sub?: string;
 }
 
-export const TAB_SECTIONS: Record<Exclude<TabId, 'overview' | 'planner'>, Section[]> = {
+export const TAB_SECTIONS: Record<ListTabId, Section[]> = {
   heroes: [{ id: 'heroes', title: 'Heroes', base: 'home', kinds: ['hero'] }],
   pets: [{ id: 'pets', title: 'Pets', base: 'home', kinds: ['pet'] }],
   equipment: [{ id: 'equipment', title: 'Hero equipment', base: 'home', kinds: ['equipment'] }],

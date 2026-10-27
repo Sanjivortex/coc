@@ -429,8 +429,8 @@ export interface PlanSettings {
   petPotions: number;
   hammers: { heroes: number; building: number; fighting: number; spells: number };
   books: { heroes: number; building: number; fighting: number; spells: number; everything: number };
-  /** Hammer Jam used in the Hammer Jam scenarios: starts in `startDays`, lasts `days`, `discount` off time and cost. */
-  hammerJam: { startDays: number; days: number; discount: number };
+  /** Hammer Jam used in the Hammer Jam scenarios: unix seconds it starts and ends, `discount` off time and cost. */
+  hammerJam: { start: number; end: number; discount: number };
   includeSupercharge: boolean;
   includeCrafted: boolean;
 }
@@ -448,7 +448,8 @@ export const DEFAULT_SETTINGS: PlanSettings = {
   petPotions: 0,
   hammers: { heroes: 0, building: 0, fighting: 0, spells: 0 },
   books: { heroes: 0, building: 0, fighting: 0, spells: 0, everything: 0 },
-  hammerJam: { startDays: 0, days: 15, discount: 0.5 },
+  // Callers with a clock replace these with real dates (see `defaultJamDates`).
+  hammerJam: { start: 0, end: 15 * DAY, discount: 0.5 },
   includeSupercharge: false,
   includeCrafted: true,
 };
@@ -473,9 +474,17 @@ export function scenarioFlags(id: ScenarioId) {
   };
 }
 
-export function jamWindow(s: PlanSettings, always = false) {
-  const start = always ? 0 : s.hammerJam.startDays * DAY;
-  return { start, end: always ? Infinity : start + s.hammerJam.days * DAY, factor: 1 - s.hammerJam.discount };
+/** The event in seconds from `now` (negative start = already running). */
+export function jamWindow(s: PlanSettings, now = 0) {
+  return { start: s.hammerJam.start - now, end: s.hammerJam.end - now, factor: 1 - s.hammerJam.discount };
+}
+
+/** A 15-day event starting at the beginning of today, until the player enters the real dates. */
+export function defaultJamDates(now: number, days = 15) {
+  const d = new Date(now * 1000);
+  d.setHours(0, 0, 0, 0);
+  const start = Math.floor(d.getTime() / 1000);
+  return { start, end: start + days * DAY };
 }
 
 type Magic = { kind: 'hammer' | 'book'; count: number; eligible: (c: Chain) => boolean };
@@ -549,9 +558,9 @@ function potionsFor(queue: Queue, s: PlanSettings): number {
 }
 
 /** Simulation options for one home-village queue under a scenario. */
-function queueOptions(queue: 'builder' | 'lab' | 'pet', s: PlanSettings, scenario: ScenarioId, workers: number): QueueSim {
+function queueOptions(queue: 'builder' | 'lab' | 'pet', s: PlanSettings, scenario: ScenarioId, workers: number, now: number): QueueSim {
   const f = scenarioFlags(scenario);
-  const jam = f.jam ? jamWindow(s) : undefined;
+  const jam = f.jam ? jamWindow(s, now) : undefined;
   // Gold Pass boosts builders and research, not the Pet House.
   const gp = f.gold && queue !== 'pet' ? 1 - s.goldPass : 1;
   const hours = f.items ? potionsFor(queue, s) : 0;
@@ -561,26 +570,28 @@ function queueOptions(queue: 'builder' | 'lab' | 'pet', s: PlanSettings, scenari
     timeFactor: gp,
     costFactor: gp,
     // Potions are worth twice as much during Hammer Jam, so they are spent at its start.
-    potion: hours > 0 ? { start: jam ? jam.start : 0, hours, multiplier: POTION_MULTIPLIER[queue]! } : undefined,
+    potion: hours > 0 ? { start: jam && jam.end > 0 ? Math.max(0, jam.start) : 0, hours, multiplier: POTION_MULTIPLIER[queue]! } : undefined,
     helperRate: queue === 'builder' ? s.apprentice : queue === 'lab' ? s.labAssistant : 0,
     hammerJam: jam,
   };
 }
 
-export function planVillage(chains: Chain[], s: PlanSettings, scenario: ScenarioId = 'normal'): PlanResult {
+/** `now` (unix seconds) places the Hammer Jam dates on the plan's clock, which starts at 0. */
+export function planVillage(chains: Chain[], s: PlanSettings, scenario: ScenarioId = 'normal', now = 0): PlanResult {
   const f = scenarioFlags(scenario);
   const adjusted = f.items ? applyMagicItems(chains, s) : chains;
   const pick = (base: Base, queue: Queue) => adjusted.filter((c) => c.base === base && c.queue === queue);
 
-  const builder = simulateQueue(pick('home', 'builder'), queueOptions('builder', s, scenario, s.builders));
-  const lab = simulateQueue(pick('home', 'lab'), queueOptions('lab', s, scenario, 1));
-  const pet = simulateQueue(pick('home', 'pet'), queueOptions('pet', s, scenario, 1));
+  const builder = simulateQueue(pick('home', 'builder'), queueOptions('builder', s, scenario, s.builders, now));
+  const lab = simulateQueue(pick('home', 'lab'), queueOptions('lab', s, scenario, 1, now));
+  const pet = simulateQueue(pick('home', 'pet'), queueOptions('pet', s, scenario, 1, now));
   const builder2 = simulateQueue(pick('builder', 'builder'), { workers: s.builderBaseBuilders, timeFactor: 1, costFactor: 1 });
   const lab2 = simulateQueue(pick('builder', 'lab'), { workers: 1, timeFactor: 1, costFactor: 1 });
 
   const instantCost: Partial<Record<Res, number>> = {};
   const ore: [number, number, number] = [0, 0, 0];
-  const wallFactor = f.jam ? 1 - s.hammerJam.discount : 1;
+  const jamAhead = f.jam && s.hammerJam.end > now;
+  const wallFactor = jamAhead ? 1 - s.hammerJam.discount : 1;
   for (const c of adjusted) {
     if (c.queue === 'instant') {
       // Walls have no timer, so with Hammer Jam they can all be bought at the event price.
@@ -608,14 +619,14 @@ export function planVillage(chains: Chain[], s: PlanSettings, scenario: Scenario
 }
 
 /** One chain on its own worker under a scenario (potions, books and hammers all go to this upgrade). */
-export function simulateChain(chain: Chain, s: PlanSettings, scenario: ScenarioId): QueueResult {
+export function simulateChain(chain: Chain, s: PlanSettings, scenario: ScenarioId, now = 0): QueueResult {
   const home = chain.base === 'home';
   const timed = chain.queue === 'builder' || chain.queue === 'lab' || chain.queue === 'pet';
   if (!home || !timed) {
     return simulateQueue([chain], { workers: 1, timeFactor: 1, costFactor: 1 });
   }
   const [c] = scenarioFlags(scenario).items ? applyMagicItems([chain], s) : [chain];
-  return simulateQueue([c], { ...queueOptions(chain.queue as 'builder' | 'lab' | 'pet', s, scenario, 1), extra: undefined });
+  return simulateQueue([c], { ...queueOptions(chain.queue as 'builder' | 'lab' | 'pet', s, scenario, 1, now), extra: undefined });
 }
 
 export function chainCost(chain: Chain): Partial<Record<Res, number>> {
