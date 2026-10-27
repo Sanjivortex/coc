@@ -55,7 +55,7 @@ Player and clan responses are cached for 5 minutes (`'use cache'` in `src/lib/co
 [`deploy/setup-vps.sh`](deploy/setup-vps.sh) installs Node.js 22 privately in `/opt/coc-node` (other
 apps keep their Node), clones the repo to `/opt/coc` as a `coc` system user, asks for the API token
 once (checks it directly and through the RoyaleAPI proxy, then writes `.env.local`), builds, runs the
-app as the `coc` systemd service on the first free port from 3000 (localhost only), and appends one
+app as the `coc` systemd service on the first free port from 3900 (localhost only), and appends one
 site block to `/etc/caddy/Caddyfile` after a backup. If `caddy validate` fails, the original
 Caddyfile is put back. Caddy then gets the HTTPS certificate on its own.
 

@@ -37,10 +37,11 @@ die() {
 [ -n "$DOMAIN" ] || die "Usage: setup-vps.sh [--check] <domain>, e.g. coc.test-hub.xyz"
 [ "$(id -u)" -eq 0 ] || die "Run as root (sudo)."
 
-# Ports used by listening sockets or by reverse_proxy lines in the Caddyfile.
+# Ports used by listening sockets, or mentioned anywhere in the Caddyfile (localhost:3000, :3000, …)
+# so an app that is down right now does not lose its port to us.
 port_taken() {
   ss -ltnH "( sport = :$1 )" 2>/dev/null | grep -q . && return 0
-  [ -f "$CADDYFILE" ] && grep -qE "(localhost|127\.0\.0\.1|0\.0\.0\.0):$1([^0-9]|$)" "$CADDYFILE"
+  [ -f "$CADDYFILE" ] && grep -vE '^[[:space:]]*#' "$CADDYFILE" | grep -qE ":$1([^0-9]|$)"
 }
 
 list_sites() {
@@ -71,7 +72,7 @@ check_dns() {
 
 list_sites
 log "Listening ports"
-ss -ltnpH 2>/dev/null | awk '{ print "  " $4 "  " $6 }' | sort -u || true
+ss -ltnpH 2>/dev/null | awk '{ line = "  " $4 " "; for (i = 6; i <= NF; i++) line = line " " $i; print line }' | sort -u || true
 log "DNS"
 check_dns
 if [ "$CHECK_ONLY" -eq 1 ]; then
@@ -165,7 +166,8 @@ log "App service"
 PORT="${PORT:-}"
 if [ -z "$PORT" ] && [ -f "$UNIT" ]; then PORT=$(grep -oE -- '-p [0-9]+' "$UNIT" | awk '{ print $2 }' || true); fi
 if [ -z "$PORT" ]; then
-  PORT=3000
+  # 3000 is every Node app's default; start higher so a stopped app does not collide with us later.
+  PORT=3900
   while port_taken "$PORT"; do PORT=$((PORT + 1)); done
 fi
 cat >"$UNIT" <<EOF
