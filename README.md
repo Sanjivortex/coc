@@ -74,8 +74,10 @@ A Telegram message 10 minutes before a home-village builder is free, for one acc
    as a `.json`/`.txt` file, or paste it on `/tracker`, which sends it to `POST /api/alerts`. Only the
    `ALERT_PLAYER_TAG` account is accepted. The export is saved to `.data/alerts.json` and
    [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) picks it up.
-4. For each new export the bot asks whether a boost is running. Reply with the time left, e.g.
-   `potion 2h 41m`, `bite 45m`, `potion 2h 41m bite 45m` or `no`. Without a reply it uses
+4. For each new export the bot asks with buttons which boost is running (Builder Potion, Builder
+   Bite, both, none), then the time left for each (1h…6h for potions, 15m…3h for bites, the
+   export's potion time, or a typed time like `2h 41m`). `/boost` asks again; typed replies such as
+   `potion 2h 41m bite 45m` or `no` work at any time. Without an answer it uses
    `boosts.builder_boost` from the export. The export's timers are the time left at normal speed;
    builders work 10× with a Builder Potion, 2× with a Builder Bite and 11× with both, counted from
    the export's time until the end you gave. `/status` lists the finish times.
