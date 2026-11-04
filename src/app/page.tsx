@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { CalendarClock, FileUp, Hammer, Swords } from 'lucide-react';
+import { CloudSky } from '@/components/CloudSky';
 import { TagSearch } from '@/components/TagSearch';
 import { buttonClass } from '@/components/ui/styles';
 import { Panel } from '@/components/ui/display';
@@ -50,32 +51,41 @@ export default function Home() {
   const max = Math.max(...example.rows.map((r) => r.time));
   return (
     <div className="pb-8">
-      <section className="mx-auto max-w-3xl pb-14 pt-10 text-center sm:pt-16">
-        <span className="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1 text-xs text-ink-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-good" aria-hidden />
-          Updated for Town Hall {MAX_TH}
-        </span>
-        <h1 className="mt-5 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">Know exactly when you&apos;ll be maxed</h1>
-        <p className="mx-auto mt-4 max-w-xl text-[15px] text-ink-2">
-          Clash of Clans stats with an upgrade planner built in: every hero, pet and building timed with your builders, potions, Gold Pass and
-          Hammer Jam.
-        </p>
-        <div className="mt-8 flex justify-center">
-          <TagSearch />
+      <section className="relative -mx-4 overflow-hidden px-4 pb-16 pt-14 text-center sm:-mx-6 sm:px-6 sm:pt-20">
+        <CloudSky />
+        <div className="relative mx-auto max-w-3xl">
+          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel/70 px-3 py-1 text-xs text-ink-2 backdrop-blur">
+            <span className="h-1.5 w-1.5 rounded-full bg-good" aria-hidden />
+            Updated for Town Hall {MAX_TH}
+          </span>
+          <h1 className="mt-5 text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
+            Know exactly when you&apos;ll be{' '}
+            <span className="bg-gradient-to-b from-[#ffe29a] via-[#f7cf5e] to-[#e9a91f] bg-clip-text text-transparent">maxed</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-[15px] text-ink-2">
+            Clash of Clans stats with an upgrade planner built in: every hero, pet and building timed with your builders, potions, Gold Pass
+            and Hammer Jam.
+          </p>
+          <div className="mt-9 flex justify-center">
+            <TagSearch />
+          </div>
+          <p className="mt-3 text-[13px] text-ink-3">
+            No tag handy?{' '}
+            <Link href="/player/DEMO" className="text-brand underline-offset-4 hover:underline">
+              Open the demo profile
+            </Link>
+          </p>
         </div>
-        <p className="mt-2 text-[13px] text-ink-3">
-          No tag handy?{' '}
-          <Link href="/player/DEMO" className="text-ink underline-offset-4 hover:underline">
-            Open the demo profile
-          </Link>
-        </p>
       </section>
 
-      <section className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {FEATURES.map((f) => (
-          <div key={f.title} className="bg-panel p-6">
-            <span className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-raised text-ink-2">
-              <f.icon size={16} aria-hidden />
+          <div
+            key={f.title}
+            className="rounded-2xl border border-line bg-panel p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-all hover:-translate-y-0.5 hover:border-line-strong"
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-b from-[#f7cf5e] to-[#e9a91f] text-[#231600] shadow-[0_2px_0_#8a5f00]">
+              <f.icon size={16} strokeWidth={2.5} aria-hidden />
             </span>
             <h2 className="mt-4 text-sm font-semibold">{f.title}</h2>
             <p className="mt-1.5 text-[13px] text-ink-3">{f.text}</p>
@@ -121,7 +131,7 @@ export default function Home() {
               </li>
             ))}
           </ol>
-          <Link href="/tracker" className={buttonClass('secondary', 'md', 'mt-5')}>
+          <Link href="/tracker" className={buttonClass('primary', 'md', 'mt-5')}>
             <FileUp size={16} aria-hidden /> Open Upgrade Tracker
           </Link>
         </Panel>

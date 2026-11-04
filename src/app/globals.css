@@ -2,22 +2,24 @@
 
 :root {
   color-scheme: dark;
-  /* Surfaces: page < panel < raised. Hairline borders do the separating. */
-  --bg: #0b0c0e;
-  --panel: #111316;
-  --raised: #171a1e;
-  --hover: #1c2025;
-  --line: #22262c;
-  --line-strong: #2e333a;
+  /* Night palette: deep navy sky, panels a step lighter, hairline blue borders. */
+  --bg: #06080f;
+  --panel: #0c1120;
+  --raised: #121a2e;
+  --hover: #18223a;
+  --line: #1d2740;
+  --line-strong: #2b3a5f;
   /* Ink */
-  --ink: #eceef0;
-  --ink-2: #b2b8c1;
-  --ink-3: #7c8490;
-  /* Brand: Clash gold, used sparingly (logo, active tab, focus). */
-  --brand: #e8b13a;
-  --focus: #e8b13a;
+  --ink: #eef2fd;
+  --ink-2: #aab6d6;
+  --ink-3: #6f7d9d;
+  /* Brand: Clash gold (logo, primary buttons, active tab, focus). */
+  --brand: #f0b429;
+  --gold-2: #f7cf5e;
+  --gold-edge: #8a5f00;
+  --focus: #f0b429;
   /* Resources (identity dots next to numbers, never text color). */
-  --res-gold: #e8b13a;
+  --res-gold: #f0b429;
   --res-elixir: #c36be0;
   --res-dark: #8e7cf0;
   --res-gem: #3fbf7f;
@@ -27,17 +29,17 @@
   --warning: #d29922;
   --critical: #f0524a;
   --info: #58a6ff;
-  /* Chart categorical slots (dark steps, validated on --panel). */
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #d55181;
-  --series-muted: #3b4048;
-  --grid: #1f2328;
-  --axis: #353a42;
-  --jam: rgba(232, 177, 58, 0.09);
-  --jam-edge: rgba(232, 177, 58, 0.45);
+  /* Chart categorical slots. */
+  --series-1: #4f9cf0;
+  --series-2: #e86830;
+  --series-3: #22b07f;
+  --series-4: #d99a10;
+  --series-5: #e0628f;
+  --series-muted: #39415c;
+  --grid: #161d33;
+  --axis: #2a3550;
+  --jam: rgba(240, 180, 41, 0.09);
+  --jam-edge: rgba(240, 180, 41, 0.45);
 }
 
 @theme inline {
@@ -64,7 +66,10 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 460px at 50% -8%, rgba(63, 94, 180, 0.16), transparent 65%),
+    var(--bg);
+  background-attachment: fixed;
   color: var(--ink);
   font-size: 14px;
   line-height: 1.5;
@@ -77,7 +82,7 @@ body {
 }
 
 ::selection {
-  background: rgba(232, 177, 58, 0.3);
+  background: rgba(240, 180, 41, 0.3);
 }
 
 /* Columns of numbers line up; big standalone figures keep proportional digits. */
@@ -102,6 +107,103 @@ input[type='number']::-webkit-outer-spin-button {
   margin: 0;
 }
 
+/* ---------------------------------------------------------------------------
+   Night sky: drifting clouds and stars behind the home hero and the
+   "Searching for village" overlay (like the attack search in the game).
+--------------------------------------------------------------------------- */
+.sky {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.star {
+  position: absolute;
+  height: 2px;
+  width: 2px;
+  border-radius: 9999px;
+  background: #d7e2fb;
+  opacity: 0.3;
+}
+.s1 { top: 8%; left: 12%; }
+.s2 { top: 15%; left: 78%; }
+.s3 { top: 24%; left: 45%; }
+.s4 { top: 5%; left: 60%; }
+.s5 { top: 32%; left: 8%; }
+.s6 { top: 18%; left: 30%; }
+.s7 { top: 10%; left: 88%; }
+.s8 { top: 28%; left: 66%; }
+.cloud {
+  position: absolute;
+  left: 0;
+  border-radius: 9999px;
+  filter: blur(8px);
+  background: rgba(150, 175, 230, 0.1);
+}
+.c1 { top: 10%; width: 260px; height: 56px; }
+.c2 { top: 32%; width: 340px; height: 78px; }
+.c3 { top: 58%; width: 200px; height: 50px; }
+.c4 { top: 76%; width: 300px; height: 66px; }
+.c5 { top: 44%; width: 180px; height: 46px; }
+
+/* Full-screen "find a match" overlay while a player/clan page loads. */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: rgba(6, 8, 15, 0.94);
+}
+.radar {
+  position: relative;
+  display: grid;
+  height: 112px;
+  width: 112px;
+  place-items: center;
+}
+.radar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid var(--line-strong);
+  background: radial-gradient(circle, rgba(240, 180, 41, 0.1), transparent 65%);
+}
+.radar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(240, 180, 41, 0.55);
+  opacity: 0;
+}
+.mag {
+  color: var(--brand);
+}
+.search-label {
+  position: relative;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.search-detail {
+  position: relative;
+  margin-top: -18px;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.search-dots::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .drawer-in {
     animation: drawer-in 180ms ease-out;
@@ -109,7 +211,35 @@ input[type='number']::-webkit-outer-spin-button {
   .fade-in {
     animation: fade-in 140ms ease-out;
   }
+  .star {
+    animation: twinkle 3.2s ease-in-out infinite;
+  }
+  .s2 { animation-delay: 0.6s; }
+  .s3 { animation-delay: 1.2s; }
+  .s4 { animation-delay: 0.3s; }
+  .s5 { animation-delay: 0.9s; }
+  .s6 { animation-delay: 1.5s; }
+  .s7 { animation-delay: 0.2s; }
+  .s8 { animation-delay: 1s; }
+  .cloud {
+    animation: cloud-drift linear infinite;
+  }
+  .c1 { animation-duration: 60s; }
+  .c2 { animation-duration: 85s; animation-delay: -30s; }
+  .c3 { animation-duration: 70s; animation-delay: -45s; }
+  .c4 { animation-duration: 95s; animation-delay: -12s; }
+  .c5 { animation-duration: 65s; animation-delay: -55s; }
+  .radar::after {
+    animation: radar-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  .mag {
+    animation: mag-roam 2.6s ease-in-out infinite;
+  }
+  .search-dots::after {
+    animation: search-dots 1.2s steps(4, end) infinite;
+  }
 }
+
 @keyframes drawer-in {
   from {
     transform: translateX(24px);
@@ -119,5 +249,53 @@ input[type='number']::-webkit-outer-spin-button {
 @keyframes fade-in {
   from {
     opacity: 0;
+  }
+}
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+@keyframes cloud-drift {
+  from {
+    transform: translateX(-340px);
+  }
+  to {
+    transform: translateX(calc(100vw + 340px));
+  }
+}
+@keyframes radar-ping {
+  0% {
+    transform: scale(0.55);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+@keyframes mag-roam {
+  0%, 100% {
+    transform: translate(-5px, -5px) rotate(-8deg);
+  }
+  50% {
+    transform: translate(5px, 5px) rotate(6deg);
+  }
+}
+@keyframes search-dots {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
   }
 }
