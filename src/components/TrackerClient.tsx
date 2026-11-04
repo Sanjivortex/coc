@@ -19,6 +19,7 @@ export function TrackerClient() {
   const [selected, setSelected] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState(false);
+  const [alertNote, setAlertNote] = useState<string | null>(null);
   const now = useNow();
 
   const saved = useMemo(() => storedExports ?? {}, [storedExports]);
@@ -55,6 +56,18 @@ export function TrackerClient() {
       setText('');
       setError(null);
       setEditing(false);
+      // Telegram builder alerts: the server keeps the owner's latest export. Other accounts (403)
+      // and servers without Telegram (503) are skipped silently.
+      setAlertNote(null);
+      fetch('/api/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: raw.trim() })
+        .then(async (r) => {
+          if (r.ok) setAlertNote('Telegram alerts updated for this export.');
+          else if (r.status !== 403 && r.status !== 503) {
+            const body = (await r.json().catch(() => null)) as { message?: string } | null;
+            setAlertNote(`Telegram alerts not updated: ${body?.message ?? `error ${r.status}`}`);
+          }
+        })
+        .catch(() => setAlertNote('Telegram alerts not updated: server not reachable.'));
     } catch (e) {
       setError(e instanceof ExportParseError ? e.message : 'Could not read this export.');
     }
@@ -168,6 +181,7 @@ export function TrackerClient() {
                 Town Hall {village.townHall}
                 {village.builderHall > 0 && ` · Builder Hall ${village.builderHall}`}
                 {village.timestamp && now && ` · copied ${formatDuration(now - village.timestamp)} ago`}
+                {alertNote && <span className="ml-2 text-ink-3">· {alertNote}</span>}
               </span>
               <Link href={`/player/${tagSlug(village.tag)}`} className={buttonClass('ghost', 'sm')}>
                 Live profile

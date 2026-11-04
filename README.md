@@ -61,6 +61,23 @@ Caddyfile is put back. Caddy then gets the HTTPS certificate on its own.
 
 Logs: `journalctl -u coc -f`. If the build gets killed on a 1 GB VPS, add swap and run it again.
 
+### Telegram builder alerts
+
+A Telegram message 10 minutes before a home-village builder is free, for one account:
+
+1. In Telegram, message **@BotFather**, send `/newbot` and copy the token.
+2. Run the deploy command above. It asks for the bot token and your player tag, waits for you to
+   send `/start` to the bot, saves `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `ALERT_PLAYER_TAG`
+   in `.env.local`, sends a test message and starts the `coc-alerts` service.
+3. Every time you start an upgrade, copy the export again and paste it on `/tracker`. The page sends
+   it to `POST /api/alerts` (only the `ALERT_PLAYER_TAG` account is accepted), which saves it to
+   `.data/alerts.json`; [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) checks it every
+   30 seconds. Running Builder Potions (`boosts.builder_boost` in the export) are counted at 10×.
+
+Optional: `ALERT_LEAD_MINUTES` (default 10), `ALERT_TIMEZONE` (default `Asia/Kolkata`).
+Logs: `journalctl -u coc-alerts -f`. Preview the alert times for an export without sending anything:
+`node scripts/telegram-alerts.mjs --plan export.json`.
+
 ## Where the data comes from
 
 - **Official API** (`GET /v1/players/{tag}`): heroes, hero equipment, pets, troops, spells, siege

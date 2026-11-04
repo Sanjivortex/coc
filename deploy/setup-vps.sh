@@ -160,6 +160,56 @@ if [ ! -s "$ENV_FILE" ]; then
   chown "$APP_USER:$APP_USER" "$ENV_FILE"
 fi
 
+# KEY=value lines in .env.local; rewritten in place so the owner and mode stay the same.
+env_has() { grep -qE "^$1=.+" "$ENV_FILE"; }
+del_env() {
+  local rest
+  rest=$(grep -vE "^$1=" "$ENV_FILE" || true)
+  printf '%s\n' "$rest" | sed '/^$/d' >"$ENV_FILE"
+}
+set_env() {
+  del_env "$1"
+  printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+}
+alerts() { as_app node --env-file="$ENV_FILE" "$APP_DIR/scripts/telegram-alerts.mjs" "$@"; }
+
+if ! env_has TELEGRAM_CHAT_ID; then
+  log "Telegram builder alerts (optional)"
+  tg="${TELEGRAM_BOT_TOKEN:-}"
+  if [ -z "$tg" ] && [ -r /dev/tty ]; then
+    read -rsp "  Bot token from @BotFather (input hidden, Enter to skip): " tg </dev/tty
+    echo
+  fi
+  if [ -z "$tg" ]; then
+    echo "  skipped (run this script again to set it up)"
+  else
+    set_env TELEGRAM_BOT_TOKEN "$tg"
+    if ! bot=$(alerts --check); then
+      del_env TELEGRAM_BOT_TOKEN
+      die "Telegram rejected the bot token. Copy it again from @BotFather and rerun."
+    fi
+    echo "  bot: $bot"
+    ptag="${ALERT_PLAYER_TAG:-}"
+    if [ -z "$ptag" ]; then
+      [ -r /dev/tty ] || die "No terminal: run with ALERT_PLAYER_TAG=... in the environment."
+      read -rp "  Your player tag, e.g. #9Y9PGP9VP: " ptag </dev/tty
+    fi
+    # Stored without '#': dotenv parsers treat '#' as the start of a comment.
+    ptag=$(printf '%s' "$ptag" | tr -d '#[:space:]' | tr '[:lower:]' '[:upper:]')
+    [ -n "$ptag" ] || die "Empty player tag."
+    set_env ALERT_PLAYER_TAG "$ptag"
+    chat="${TELEGRAM_CHAT_ID:-}"
+    if [ -z "$chat" ]; then
+      [ -r /dev/tty ] || die "No terminal: run with TELEGRAM_CHAT_ID=... in the environment."
+      echo "  Open https://t.me/${bot#@} in Telegram and send /start, then press Enter here."
+      read -r _ </dev/tty
+      chat=$(alerts --chat-id) || die "No /start message reached the bot. Send /start to $bot and rerun."
+    fi
+    set_env TELEGRAM_CHAT_ID "$chat"
+    alerts --test || die "Could not send the test message."
+  fi
+fi
+
 log "Installing packages and building (takes a minute or two)"
 as_app npm ci --no-audit --no-fund
 as_app npm run build
@@ -203,6 +253,33 @@ if ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT/"; then
   die "The app did not start on port $PORT (logs above)."
 fi
 echo "  running on 127.0.0.1:$PORT"
+
+ALERTS_SERVICE="$SERVICE-alerts"
+ALERTS_UNIT="/etc/systemd/system/$ALERTS_SERVICE.service"
+if env_has TELEGRAM_CHAT_ID; then
+  log "Telegram alerts service"
+  cat >"$ALERTS_UNIT" <<EOF
+[Unit]
+Description=CoC Stats Telegram builder alerts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$APP_USER
+WorkingDirectory=$APP_DIR
+ExecStart=$NODE_DIR/bin/node --env-file=$ENV_FILE $APP_DIR/scripts/telegram-alerts.mjs
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable "$ALERTS_SERVICE" >/dev/null 2>&1
+  systemctl restart "$ALERTS_SERVICE"
+  echo "  running (logs: journalctl -u $ALERTS_SERVICE -f)"
+fi
 
 log "Caddy"
 if ! command -v caddy >/dev/null || [ ! -f "$CADDYFILE" ]; then
