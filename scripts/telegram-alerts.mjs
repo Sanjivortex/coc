@@ -66,17 +66,17 @@ const BITE_EXTRA = 1;
 // Export → builder upgrades with real finish times
 // ---------------------------------------------------------------------------
 
-let names;
-async function gameNames() {
-  if (names) return names;
+let game;
+async function gameInfo() {
+  if (game) return game;
   const data = JSON.parse(await readFile(path.join(ROOT, 'src', 'data', 'gamedata.json'), 'utf8'));
-  names = new Map();
+  game = new Map();
   for (const item of data.items) {
     if (item.base !== 'home' || item.queue !== 'builder') continue;
-    if (item.dataId !== null) names.set(item.dataId, item.name);
-    for (const m of item.modules ?? []) if (m.dataId !== null) names.set(m.dataId, `${item.name} ${m.name}`);
+    if (item.dataId !== null) game.set(item.dataId, { name: item.name, levels: item.lv ?? [] });
+    for (const m of item.modules ?? []) if (m.dataId !== null) game.set(m.dataId, { name: `${item.name} ${m.name}`, levels: m.lv ?? [] });
   }
-  return names;
+  return game;
 }
 
 /** Boosts as absolute end times; a boost counts from the export's timestamp until its end. */
@@ -100,16 +100,20 @@ export function finishTime(start, work, { potionEnd, biteEnd }) {
 }
 
 /** Every running home-village builder upgrade in the export, soonest first. */
-export function builderUpgrades(ex, nameOf, boosts = exportBoosts(ex)) {
+export function builderUpgrades(ex, infoMap, boosts = exportBoosts(ex)) {
   const out = [];
   const seen = new Map();
+  const th = (ex.buildings ?? []).find((b) => b.data === 1000001)?.lvl ?? 0;
   const add = (id, level, timer) => {
-    const name = nameOf.get(id);
-    if (!name || typeof timer !== 'number' || timer <= 0) return;
+    const it = infoMap.get(id);
+    if (!it || typeof timer !== 'number' || timer <= 0) return;
     const base = `${id}:${level}`;
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
-    out.push({ key: `${base}:${n}`, name, level: level + 1, finishAt: Math.round(finishTime(ex.timestamp, timer, boosts)) });
+    // The upgrade after the running one (level+1 → level+2); null when the building is maxed.
+    const lv = it.levels[level + 1];
+    const next = lv ? { level: level + 2, cost: lv.c, res: lv.r, hall: lv.h } : null;
+    out.push({ key: `${base}:${n}`, name: it.name, level: level + 1, finishAt: Math.round(finishTime(ex.timestamp, timer, boosts)), next, th });
   };
   for (const section of ['buildings', 'traps', 'heroes', 'guardians']) {
     for (const e of ex[section] ?? []) {
@@ -139,6 +143,72 @@ export function span(seconds) {
 function minutes(seconds) {
   return Math.max(1, Math.ceil(seconds / 60));
 }
+
+// ---------------------------------------------------------------------------
+// Next upgrade cost, Gold Pass / Hammer Jam discounts and loot
+// ---------------------------------------------------------------------------
+
+/** 420000 → "420K", 15500000 → "15.5M", 1200000 → "1.2M" (3 significant digits). */
+export function costFmt(n) {
+  const abs = Math.abs(n);
+  const sig = (x) => {
+    const s = Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(2);
+    return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+  };
+  if (abs >= 1e9) return `${sig(n / 1e9)}B`;
+  if (abs >= 1e6) return `${sig(n / 1e6)}M`;
+  if (abs >= 1e3) return `${sig(n / 1e3)}K`;
+  return String(Math.round(n));
+}
+
+export const RES_SHORT = { G: 'Gold', E: 'Elixir', D: 'DE', GE: 'Gold/Elixir', BG: 'B.Gold', BE: 'B.Elixir' };
+
+/**
+ * Next upgrade's real cost. The running upgrade's timer in the export is already discounted by the
+ * game, but the base cost of the next one is not: Gold Pass takes its % off, and Hammer Jam halves
+ * whatever starts before the jam ends (the builder freeing up is when it would start).
+ */
+export function nextCost(next, finishAt, settings, now) {
+  let cost = next.cost;
+  const tags = [];
+  const gp = settings.goldPass ?? 0;
+  if (gp > 0) {
+    cost *= 1 - gp / 100;
+    tags.push(`GP ${gp}%`);
+  }
+  if ((settings.jamEnd ?? 0) > now && finishAt <= settings.jamEnd) {
+    cost *= 0.5;
+    tags.push('Jam');
+  }
+  return { cost: Math.round(cost), tags };
+}
+
+const LOOT_KEY = { g: 'G', gold: 'G', e: 'E', elixir: 'E', d: 'D', de: 'D', dark: 'D' };
+/** Reads "g 12.5m e 8m d 180k" (any subset) into resource amounts; null when nothing matches. */
+export function parseLoot(text) {
+  const t = text.toLowerCase().replace(/^\/loot\s*/, '');
+  const out = {};
+  for (const m of t.matchAll(/\b(gold|elixir|dark|de|g|e|d)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(b|m|k)?(?![a-z])/g)) {
+    const mult = m[3] === 'k' ? 1e3 : m[3] === 'm' ? 1e6 : m[3] === 'b' ? 1e9 : 1;
+    out[LOOT_KEY[m[1]]] = Math.round(Number(m[2]) * mult);
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** After this long the bot asks for fresh resource amounts after an export. */
+const LOOT_STALE = 12 * 3600;
+
+function lootFooter(resources) {
+  if (!resources) return null;
+  const parts = ['G', 'E', 'D'].filter((r) => (resources[r] ?? 0) > 0).map((r) => `${RES_SHORT[r]} ${costFmt(resources[r])}`);
+  return parts.length > 0 ? `💰 ${parts.join(' · ')} (${clock(resources.at)} · badalne ke liye /loot)` : null;
+}
+
+const LOOT_ASK = [
+  '💰 Abhi Gold, Elixir aur Dark Elixir kitna hai?',
+  'Isse bataunga ki next upgrade ke liye loot karna hai ya sab set hai.',
+  'Reply jaise: g 12.5m e 8m d 180k — ya /skip',
+].join('\n');
 
 /**
  * Reads a reply about running boosts. "2h 41m" or "potion 2h 41m" → potion, "bite 45m" → bite,
@@ -173,10 +243,24 @@ function boostLine({ potionEnd, biteEnd }, now) {
   return parts.length > 0 ? parts.join(' + ') : 'koi boost nahi';
 }
 
-function upgradeList(upgrades, now, limit = 10) {
+function upgradeLine(u, now, settings, resources) {
+  let line = `• ${u.name} → lvl ${u.level}: ${clock(u.finishAt)} (${span(u.finishAt - now)})`;
+  if (!u.next) return line;
+  if (u.next.hall > u.th) return `${line}\n  next lvl ${u.next.level}: Town Hall ${u.next.hall} pe khulega`;
+  const nx = nextCost(u.next, u.finishAt, settings, now);
+  const tag = nx.tags.length > 0 ? ` (${nx.tags.join(' + ')})` : '';
+  line += `\n  next lvl ${u.next.level}: ${costFmt(nx.cost)} ${RES_SHORT[u.next.res] ?? u.next.res}${tag}`;
+  if (resources) {
+    const have = u.next.res === 'GE' ? Math.max(resources.G ?? 0, resources.E ?? 0) : (resources[u.next.res] ?? 0);
+    line += have >= nx.cost ? ' ✅' : ` — ${costFmt(nx.cost - have)} aur loot karo`;
+  }
+  return line;
+}
+
+function upgradeList(upgrades, now, settings = {}, resources = null, limit = 10) {
   const list = upgrades.filter((u) => u.finishAt > now).slice(0, limit);
   if (list.length === 0) return 'Koi builder upgrade nahi chal raha.';
-  return list.map((u) => `• ${u.name} → lvl ${u.level}: ${clock(u.finishAt)} (${span(u.finishAt - now)})`).join('\n');
+  return list.map((u) => upgradeLine(u, now, settings, resources)).join('\n');
 }
 
 const REPLY_HELP = [
@@ -246,8 +330,16 @@ export function nextFlow(flow, answer) {
   return step ? { ...flow, kinds, answers, step } : { done: answers };
 }
 
-export function statusText(upgrades, boosts, now) {
-  return `Boost: ${boostLine(boosts, now)}\n\n${upgradeList(upgrades, now)}`;
+export function statusText(upgrades, boosts, now, settings = {}, resources = null) {
+  const lines = [`Boost: ${boostLine(boosts, now)}`];
+  const sett = [];
+  if ((settings.goldPass ?? 0) > 0) sett.push(`Gold Pass ${settings.goldPass}%`);
+  if ((settings.jamEnd ?? 0) > now) sett.push(`Hammer Jam ${span(settings.jamEnd - now)} baaki`);
+  if (sett.length > 0) lines.push(sett.join(' · '));
+  lines.push('', upgradeList(upgrades, now, settings, resources));
+  const loot = lootFooter(resources);
+  if (loot) lines.push('', loot);
+  return lines.join('\n');
 }
 
 /** Upgrades whose alert is due now and was not sent yet (the same upgrade from a newer export counts as sent). */
@@ -314,21 +406,41 @@ async function run() {
     return;
   }
   const chatId = String(process.env.TELEGRAM_CHAT_ID);
-  const nameOf = await gameNames();
+  const info = await gameInfo();
   // offset: next Telegram update to read; sent: alert already sent per upgrade;
-  // boosts: potion/bite end times for the export with timestamp `exportTs`.
-  // flow: the boost question being answered with buttons (see nextFlow).
-  const state = { offset: 0, sent: {}, exportTs: 0, boosts: null, flow: null, ...(await readJson(STATE_FILE, {})) };
+  // boosts: potion/bite end times for the export with timestamp `exportTs`;
+  // flow: the boost question being answered with buttons (see nextFlow);
+  // goldPass/jamEnd: /pass and /jam settings; resources: amounts from /loot.
+  const state = {
+    offset: 0,
+    sent: {},
+    exportTs: 0,
+    boosts: null,
+    flow: null,
+    goldPass: 0,
+    jamEnd: 0,
+    resources: null,
+    awaitLoot: false,
+    ...(await readJson(STATE_FILE, {})),
+  };
   const save = () => writeJson(STATE_FILE, state);
   let ex = null;
   let mtime = 0;
   let upgrades = [];
   const recompute = () => {
-    upgrades = ex ? builderUpgrades(ex, nameOf, state.boosts ?? exportBoosts(ex)) : [];
+    upgrades = ex ? builderUpgrades(ex, info, state.boosts ?? exportBoosts(ex)) : [];
   };
   console.log(`Watching ${ALERTS_FILE}, alert ${LEAD / 60} min before a builder is free.`);
 
-  const confirm = (now) => send(`✅ Theek hai: ${boostLine(state.boosts, now)}.\n\n${upgradeList(upgrades, now)}`);
+  const confirm = async (now) => {
+    await send(`✅ Theek hai: ${boostLine(state.boosts, now)}.\n\n${upgradeList(upgrades, now, state, state.resources)}`);
+    // Ask for resource amounts once, and again when they are a day old.
+    if (!state.resources || now - state.resources.at > LOOT_STALE) {
+      state.awaitLoot = true;
+      await save();
+      await send(LOOT_ASK);
+    }
+  };
 
   /** Sets the boosts from answers (seconds left per boost) and shows the new finish times. */
   const setBoosts = async (answers, now) => {
@@ -357,15 +469,31 @@ async function run() {
 
   const handleButton = async (cq) => {
     await telegram('answerCallbackQuery', { callback_query_id: cq.id }).catch(() => {});
-    const [flowId, answer = ''] = String(cq.data ?? '').split('|');
-    if (!ex || !state.flow || state.flow.id !== flowId) return send('Yeh purana sawaal hai. Boost badalna hai toh /boost bhejo.');
     const now = Math.floor(Date.now() / 1000);
+    const [flowId, answer = ''] = String(cq.data ?? '').split('|');
+    // /pass and /jam buttons: "set|pass:15", "set|jam:86400" (jam seconds, 0 = not running).
+    if (flowId === 'set') {
+      const [k, v] = answer.split(':');
+      let label;
+      if (k === 'pass') {
+        state.goldPass = Number(v);
+        label = state.goldPass > 0 ? `Gold Pass ${state.goldPass}%` : 'Gold Pass nahi';
+      } else if (k === 'jam') {
+        state.jamEnd = Number(v) > 0 ? now + Number(v) : 0;
+        label = state.jamEnd > 0 ? `Hammer Jam ${span(state.jamEnd - now)} baaki` : 'Hammer Jam nahi chal raha';
+      } else return;
+      await save();
+      if (cq.message?.message_id) {
+        await telegram('editMessageText', { chat_id: chatId, message_id: cq.message.message_id, text: `${cq.message.text ?? ''}\n\n→ ${label}` }).catch(() => {});
+      }
+      return send(ex ? statusText(upgrades, state.boosts ?? exportBoosts(ex), now, state, state.resources) : `✅ ${label}`);
+    }
+    if (!ex || !state.flow || state.flow.id !== flowId) return send('Yeh purana sawaal hai. Boost badalna hai toh /boost bhejo.');
     const [type, value] = answer.split(':');
     let picked;
     if (type === 'k' && value in KIND_LABEL) picked = { kind: value, label: KIND_LABEL[value] };
     else if (type === 't' && Number(value) > 0) picked = { seconds: Number(value), label: span(Number(value)) };
     else return;
-    // Show the choice in the question and remove its buttons.
     if (cq.message?.message_id) {
       await telegram('editMessageText', {
         chat_id: chatId,
@@ -413,7 +541,8 @@ async function run() {
     if (owner && tagBody(next.tag) !== owner) return send(`Yeh export ${next.tag} ka hai. Alerts sirf #${owner} ke liye hain.`);
     if (ex && ex.timestamp > next.timestamp) return send('Yeh export pichhle wale se purana hai. Game me Copy dobara dabao aur naya bhejo.');
     if (ex && ex.timestamp === next.timestamp) {
-      return send(`Yeh export pehle hi mil chuka hai.\n\n${statusText(upgrades, state.boosts, Math.floor(Date.now() / 1000))}`);
+      const now = Math.floor(Date.now() / 1000);
+      return send(`Yeh export pehle hi mil chuka hai.\n\n${statusText(upgrades, state.boosts ?? exportBoosts(ex), now, state, state.resources)}`);
     }
     await writeJson(ALERTS_FILE, { savedAt: Math.floor(Date.now() / 1000), export: next });
     await checkExport();
@@ -448,15 +577,54 @@ async function run() {
     return importExport(next);
   };
 
+  const PASS_BUTTONS = {
+    inline_keyboard: [
+      [button('set', 'Nahi', 'pass:0'), button('set', '10%', 'pass:10')],
+      [button('set', '15%', 'pass:15'), button('set', '20%', 'pass:20')],
+    ],
+  };
+  const JAM_BUTTONS = {
+    inline_keyboard: [
+      [button('set', 'Nahi chal raha', 'jam:0'), button('set', '1 din', 'jam:86400')],
+      [button('set', '2 din', 'jam:172800'), button('set', '3 din', 'jam:259200')],
+      [button('set', '5 din', 'jam:432000'), button('set', '7 din', 'jam:604800')],
+      [button('set', '10 din', 'jam:864000'), button('set', '14 din', 'jam:1209600')],
+    ],
+  };
+
   const handle = async (text) => {
     const now = Math.floor(Date.now() / 1000);
     if (await takePiece(text, now)) return;
-    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : `Abhi tak koi export nahi mila.\n\n${HOW_TO_EXPORT}`);
-    if (/^\/start\b/i.test(text)) return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status se time dekho, /boost se boost badlo.`);
+    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts ?? exportBoosts(ex), now, state, state.resources) : `Abhi tak koi export nahi mila.\n\n${HOW_TO_EXPORT}`);
+    if (/^\/start\b/i.test(text))
+      return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status time, /boost potion/bite, /pass Gold Pass, /jam Hammer Jam, /loot resources.`);
     if (/^\/(tracker|export|help)\b/i.test(text)) return send(HOW_TO_EXPORT);
     if (/^\/boost\b/i.test(text)) return ex ? askBoost('Abhi kaunsa boost chalu hai?') : send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
+    if (/^\/pass\b/i.test(text)) return send('Is season Gold Pass ka builder boost kitna % hai?', PASS_BUTTONS);
+    if (/^\/jam\b/i.test(text)) return send('Hammer Jam kitne din aur chalega?\nJam ke andar start hone wale upgrades ka cost aur time aadha hota hai.', JAM_BUTTONS);
+    // Resource amounts: /loot with amounts, a reply while the bot waits for them, or any labeled
+    // amounts like "g 12.5m e 8m d 180k". Checked before boosts so "e 8m" is not read as a time.
+    const loot = parseLoot(text);
+    if (/^\/skip\b/i.test(text) && state.awaitLoot) {
+      state.awaitLoot = false;
+      await save();
+      return send('Theek hai. /loot se kabhi bhi amounts bata sakte ho.');
+    }
+    if (/^\/loot\b/i.test(text) || (loot && (state.awaitLoot || !/^\/\w/.test(text)))) {
+      if (!loot) {
+        state.awaitLoot = true;
+        await save();
+        return send(LOOT_ASK);
+      }
+      state.resources = { ...(state.resources ?? {}), ...loot, at: now };
+      state.awaitLoot = false;
+      await save();
+      return ex
+        ? send(statusText(upgrades, state.boosts ?? exportBoosts(ex), now, state, state.resources))
+        : send(`💰 Noted: ${lootFooter(state.resources)}\n\nAb export bhejo toh loot ka hisaab bhi dikhega.`);
+    }
     const reply = parseBoostReply(text);
-    if (!reply) return send(`Samjha nahi. Boost ke liye /boost, time ke liye /status, export ke liye /help bhejo.\n\n${REPLY_HELP}`);
+    if (!reply) return send(`Samjha nahi. Boost /boost, time /status, Gold Pass /pass, Hammer Jam /jam, resources /loot, export /help.\n\n${REPLY_HELP}`);
     if (!ex) return send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
     // A typed time while the bot waits for one ("2h 41m") answers that question.
     const plainTime = !/potion|boost|bite/i.test(text) && 'potion' in reply && !('bite' in reply) && reply.potion > 0;
@@ -521,9 +689,15 @@ async function main(args) {
       let boosts = exportBoosts(ex);
       const reply = args[2] ? parseBoostReply(args.slice(2).join(' ')) : null;
       if (reply) boosts = applyReply(boosts, reply, ex.timestamp, ex.timestamp);
+      const settings = { goldPass: Number(process.env.GOLD_PASS) || 0, jamEnd: Number(process.env.JAM_END) || 0 };
       console.log(`Boost (from export time): ${boostLine(boosts, ex.timestamp)}`);
-      for (const u of builderUpgrades(ex, await gameNames(), boosts)) {
-        console.log(`${u.name} → lvl ${u.level}: free ${clock(u.finishAt)}, alert ${clock(u.finishAt - LEAD)}`);
+      for (const u of builderUpgrades(ex, await gameInfo(), boosts)) {
+        let s = `${u.name} → lvl ${u.level}: free ${clock(u.finishAt)}, alert ${clock(u.finishAt - LEAD)}`;
+        if (u.next) {
+          const nx = nextCost(u.next, u.finishAt, settings, ex.timestamp);
+          s += ` | next ${u.next.level}: ${costFmt(nx.cost)} ${RES_SHORT[u.next.res] ?? u.next.res}${nx.tags.length ? ` (${nx.tags.join('+')})` : ''}`;
+        }
+        console.log(s);
       }
       return;
     }
