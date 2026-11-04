@@ -26,7 +26,7 @@ export function PlayerHeader({ player, demo }: { player: ApiPlayer; demo: boolea
           alt={`Town Hall ${player.townHallLevel}`}
           width={64}
           height={64}
-          className="h-16 w-16 shrink-0 object-contain"
+          className="h-16 w-16 shrink-0 object-contain drop-shadow-[0_4px_16px_rgba(240,180,41,0.25)]"
           priority
         />
         <div className="min-w-0">
@@ -35,7 +35,7 @@ export function PlayerHeader({ player, demo }: { player: ApiPlayer; demo: boolea
             {demo && <Badge tone="warning">Demo data</Badge>}
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-ink-3">
-            <span className="font-mono text-ink-2">{player.tag}</span>
+            <span className="font-mono text-brand">{player.tag}</span>
             <span aria-hidden>·</span>
             <span>Town Hall {player.townHallLevel}</span>
             {player.builderHallLevel ? (

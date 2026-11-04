@@ -15,7 +15,7 @@ export function NavLinks({ items }: { items: { href: string; label: string }[] }
         key={n.href}
         href={n.href}
         aria-current={active ? 'page' : undefined}
-        className={`rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${active ? 'text-ink' : 'text-ink-3 hover:text-ink'}`}
+        className={`rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors ${active ? 'text-brand' : 'text-ink-3 hover:text-ink'}`}
       >
         {n.label}
       </Link>
@@ -42,7 +42,7 @@ export function HeaderSearch() {
 
   return (
     <form onSubmit={submit} className="ml-auto w-full max-w-[15rem]" role="search">
-      <label className={`flex h-8 items-center gap-2 rounded-lg border bg-panel px-2.5 transition-colors focus-within:border-line-strong ${invalid ? 'border-critical' : 'border-line'}`}>
+      <label className={`flex h-8 items-center gap-2 rounded-lg border bg-panel px-2.5 transition-colors focus-within:border-[rgba(240,180,41,0.5)] ${invalid ? 'border-critical' : 'border-line'}`}>
         <Search size={14} className="shrink-0 text-ink-3" aria-hidden />
         <input
           value={value}

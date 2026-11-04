@@ -10,11 +10,11 @@ const NAV = [
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-30 h-14 border-b border-line bg-bg/90 backdrop-blur">
+    <header className="sticky top-0 z-30 h-14 border-b border-line bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-7xl items-center gap-6 px-4 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2 text-[15px] font-semibold tracking-tight">
-          <span className="grid h-6 w-6 place-items-center rounded-md bg-brand text-bg">
-            <Castle size={14} strokeWidth={2.5} aria-hidden />
+        <Link href="/" className="flex shrink-0 items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-to-b from-[#f7cf5e] to-[#e9a91f] text-[#231600] shadow-[0_2px_0_#8a5f00,0_0_18px_rgba(240,180,41,0.35)]">
+            <Castle size={15} strokeWidth={2.5} aria-hidden />
           </span>
           CoC Stats
         </Link>

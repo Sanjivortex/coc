@@ -20,7 +20,7 @@ export function Panel({
   id?: string;
 }) {
   return (
-    <section id={id} className={`rounded-xl border border-line bg-panel ${className}`}>
+    <section id={id} className={`rounded-2xl border border-line bg-panel shadow-[0_1px_0_0_rgba(255,255,255,0.03)_inset,0_12px_32px_-16px_rgba(0,0,0,0.6)] ${className}`}>
       {(title || action) && (
         <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-line px-5 py-3.5">
           <div className="min-w-0">
@@ -68,14 +68,14 @@ export function ProgressBar({ value, done = false, label }: { value: number; don
   const pct = Math.max(0, Math.min(1, value)) * 100;
   return (
     <div
-      className="h-1 w-full overflow-hidden rounded-full bg-line"
+      className="h-1.5 w-full overflow-hidden rounded-full bg-line"
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
     >
-      <div className={`h-full rounded-full ${done ? 'bg-good' : 'bg-ink-2/80'}`} style={{ width: `${pct}%` }} />
+      <div className={`h-full rounded-full ${done ? 'bg-good' : 'bg-gradient-to-r from-[#3f8ef2] to-[#7db9f7]'}`} style={{ width: `${pct}%` }} />
     </div>
   );
 }

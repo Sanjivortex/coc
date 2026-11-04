@@ -153,7 +153,7 @@ export function Segmented<T extends string | number>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={`whitespace-nowrap rounded-md font-medium transition-colors ${size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3 py-1.5 text-[13px]'} ${
-              active ? 'bg-raised text-ink shadow-[inset_0_0_0_1px_var(--line-strong)]' : 'text-ink-3 hover:text-ink'
+              active ? 'bg-[rgba(240,180,41,0.12)] text-[#f7cf5e] shadow-[inset_0_0_0_1px_rgba(240,180,41,0.4)]' : 'text-ink-3 hover:text-ink'
             }`}
           >
             {o.label}
