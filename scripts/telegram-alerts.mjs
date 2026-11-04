@@ -24,6 +24,15 @@ const ALERTS_FILE = process.env.ALERTS_FILE || path.join(ROOT, '.data', 'alerts.
 const STATE_FILE = path.join(path.dirname(ALERTS_FILE), 'alerts-state.json');
 const LEAD = Math.max(1, Number(process.env.ALERT_LEAD_MINUTES) || 10) * 60;
 const TIME_ZONE = process.env.ALERT_TIMEZONE || 'Asia/Kolkata';
+/** Full link to the Upgrade Tracker; a bare "/tracker" would show up as a bot command in Telegram. */
+const TRACKER_URL = `${(process.env.SITE_URL || 'https://coc.test-hub.xyz').replace(/\/$/, '')}/tracker`;
+const HOW_TO_EXPORT = [
+  'Export kaise bhejna hai:',
+  '1. Game me Settings → More Settings → Data Export → Copy',
+  `2. Browser me kholo: ${TRACKER_URL}`,
+  '3. Paste karke "Import village" dabao',
+  'Phir main yahan boost ka time puchunga.',
+].join('\n');
 /** Long-poll wait for Telegram replies; the alert check runs between polls. */
 const POLL_SECONDS = 25;
 
@@ -184,7 +193,7 @@ export function dueAlerts(upgrades, sent, now) {
 export function alertText(due, now) {
   const lines = due.map((u) => `• ${u.name} → lvl ${u.level}: ${minutes(u.finishAt - now)} min (${clock(u.finishAt)})`);
   const head = due.length === 1 ? '⏰ Builder free hone wala hai' : `⏰ ${due.length} builders free hone wale hain`;
-  return `${head}\n${lines.join('\n')}\n\nNaya upgrade lagao, phir export dobara paste karna.`;
+  return `${head}\n${lines.join('\n')}\n\nNaya upgrade lagao, phir export dobara yahan paste karna: ${TRACKER_URL}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,11 +292,12 @@ async function run() {
 
   const handle = async (text) => {
     const now = Math.floor(Date.now() / 1000);
-    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : 'Abhi tak koi export nahi mila. /tracker pe paste karo.');
-    if (/^\/start\b/i.test(text)) return send('Bot chalu hai. Upgrade lagao, export /tracker pe paste karo, main 10 min pehle bataunga. /status se time dekho.');
+    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : `Abhi tak koi export nahi mila.\n\n${HOW_TO_EXPORT}`);
+    if (/^\/start\b/i.test(text)) return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status se time dekho.`);
+    if (/^\/(tracker|export|help)\b/i.test(text)) return send(HOW_TO_EXPORT);
     const reply = parseBoostReply(text);
-    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}`);
-    if (!ex) return send('Pehle export /tracker pe paste karo.');
+    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}\n\nExport ke liye /help bhejo.`);
+    if (!ex) return send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
     state.boosts = applyReply(state.boosts ?? exportBoosts(ex), reply, ex.timestamp, now);
     recompute();
     await save();
