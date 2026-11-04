@@ -24,6 +24,36 @@ const ALERTS_FILE = process.env.ALERTS_FILE || path.join(ROOT, '.data', 'alerts.
 const STATE_FILE = path.join(path.dirname(ALERTS_FILE), 'alerts-state.json');
 const LEAD = Math.max(1, Number(process.env.ALERT_LEAD_MINUTES) || 10) * 60;
 const TIME_ZONE = process.env.ALERT_TIMEZONE || 'Asia/Kolkata';
+/** Full link to the Upgrade Tracker; a bare "/tracker" would show up as a bot command in Telegram. */
+const TRACKER_URL = `${(process.env.SITE_URL || 'https://coc.test-hub.xyz').replace(/\/$/, '')}/tracker`;
+const HOW_TO_EXPORT = [
+  'Export kaise bhejna hai:',
+  '1. Game me Settings → More Settings → Data Export → Copy',
+  '2. Yahin is chat me paste karke bhej do (Telegram use kai messages me todega, main jod lunga)',
+  `   ya .json/.txt file bhejo, ya website pe paste karo: ${TRACKER_URL}`,
+  'Phir main boost ka time puchunga.',
+].join('\n');
+/** Telegram splits long text into messages of up to 4096 characters; a shorter one is the last piece. */
+const TELEGRAM_PIECE = 4096;
+const MAX_EXPORT_BYTES = 512 * 1024;
+
+function tagBody(tag) {
+  return String(tag ?? '').trim().toUpperCase().replace(/^#/, '').replace(/O/g, '0');
+}
+
+/** The pasted export when the pieces so far form one, else null. */
+export function joinExport(parts) {
+  try {
+    const ex = JSON.parse(parts.join('').trim());
+    return ex && typeof ex.tag === 'string' && typeof ex.timestamp === 'number' && Array.isArray(ex.buildings) ? ex : null;
+  } catch {
+    return null;
+  }
+}
+
+export function looksLikeExportStart(text) {
+  return /^\s*\{\s*"tag"\s*:/.test(text);
+}
 /** Long-poll wait for Telegram replies; the alert check runs between polls. */
 const POLL_SECONDS = 25;
 
@@ -184,7 +214,7 @@ export function dueAlerts(upgrades, sent, now) {
 export function alertText(due, now) {
   const lines = due.map((u) => `• ${u.name} → lvl ${u.level}: ${minutes(u.finishAt - now)} min (${clock(u.finishAt)})`);
   const head = due.length === 1 ? '⏰ Builder free hone wala hai' : `⏰ ${due.length} builders free hone wale hain`;
-  return `${head}\n${lines.join('\n')}\n\nNaya upgrade lagao, phir export dobara paste karna.`;
+  return `${head}\n${lines.join('\n')}\n\nNaya upgrade lagao, phir export dobara yahan paste karna: ${TRACKER_URL}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -281,13 +311,56 @@ async function run() {
     console.log(`Alert sent: ${due.map((u) => u.name).join(', ')}`);
   };
 
+  /** Saves an export sent in the chat the same way POST /api/alerts does, then asks about boosts. */
+  const importExport = async (next) => {
+    const owner = tagBody(process.env.ALERT_PLAYER_TAG);
+    if (owner && tagBody(next.tag) !== owner) return send(`Yeh export ${next.tag} ka hai. Alerts sirf #${owner} ke liye hain.`);
+    if (ex && ex.timestamp > next.timestamp) return send('Yeh export pichhle wale se purana hai. Game me Copy dobara dabao aur naya bhejo.');
+    if (ex && ex.timestamp === next.timestamp) {
+      return send(`Yeh export pehle hi mil chuka hai.\n\n${statusText(upgrades, state.boosts, Math.floor(Date.now() / 1000))}`);
+    }
+    await writeJson(ALERTS_FILE, { savedAt: Math.floor(Date.now() / 1000), export: next });
+    await checkExport();
+  };
+
+  // Pieces of an export pasted in the chat, until they form valid JSON.
+  let pending = null;
+  const takePiece = async (text, now) => {
+    if (looksLikeExportStart(text)) pending = { parts: [], at: now };
+    else if (!pending || now - pending.at > 120) return false;
+    pending.parts.push(text);
+    pending.at = now;
+    const joined = joinExport(pending.parts);
+    if (joined) {
+      pending = null;
+      await importExport(joined);
+    } else if (text.length < TELEGRAM_PIECE - 100 || pending.parts.join('').length > MAX_EXPORT_BYTES) {
+      pending = null;
+      await send('Export adhura mila. Game me Copy dobara dabao aur poora paste karo, ya .json/.txt file bhejo.');
+    }
+    return true;
+  };
+
+  const takeFile = async (doc) => {
+    if ((doc.file_size ?? 0) > MAX_EXPORT_BYTES) return send('File bahut badi hai, yeh export nahi lagta.');
+    const file = await telegram('getFile', { file_id: doc.file_id });
+    const res = await fetch(`https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${file.file_path}`, {
+      signal: AbortSignal.timeout(30_000),
+    });
+    const next = res.ok ? joinExport([await res.text()]) : null;
+    if (!next) return send('Is file me village export nahi mila. Game me Settings → More Settings → Data Export → Copy wala text chahiye.');
+    return importExport(next);
+  };
+
   const handle = async (text) => {
     const now = Math.floor(Date.now() / 1000);
-    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : 'Abhi tak koi export nahi mila. /tracker pe paste karo.');
-    if (/^\/start\b/i.test(text)) return send('Bot chalu hai. Upgrade lagao, export /tracker pe paste karo, main 10 min pehle bataunga. /status se time dekho.');
+    if (await takePiece(text, now)) return;
+    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : `Abhi tak koi export nahi mila.\n\n${HOW_TO_EXPORT}`);
+    if (/^\/start\b/i.test(text)) return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status se time dekho.`);
+    if (/^\/(tracker|export|help)\b/i.test(text)) return send(HOW_TO_EXPORT);
     const reply = parseBoostReply(text);
-    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}`);
-    if (!ex) return send('Pehle export /tracker pe paste karo.');
+    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}\n\nExport ke liye /help bhejo.`);
+    if (!ex) return send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
     state.boosts = applyReply(state.boosts ?? exportBoosts(ex), reply, ex.timestamp, now);
     recompute();
     await save();
@@ -304,8 +377,9 @@ async function run() {
       state.offset = u.update_id + 1;
       const msg = u.message;
       // Only the owner's chat; anyone else who finds the bot is ignored.
-      if (!msg?.text || String(msg.chat?.id) !== chatId) continue;
-      await handle(msg.text);
+      if (!msg || String(msg.chat?.id) !== chatId) continue;
+      if (msg.document) await takeFile(msg.document);
+      else if (msg.text) await handle(msg.text);
     }
     if (updates.length > 0) await save();
   };

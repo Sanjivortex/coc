@@ -258,6 +258,8 @@ ALERTS_SERVICE="$SERVICE-alerts"
 ALERTS_UNIT="/etc/systemd/system/$ALERTS_SERVICE.service"
 if env_has TELEGRAM_CHAT_ID; then
   log "Telegram alerts service"
+  # The bot links to https://$DOMAIN/tracker in its messages.
+  set_env SITE_URL "https://$DOMAIN"
   cat >"$ALERTS_UNIT" <<EOF
 [Unit]
 Description=CoC Stats Telegram builder alerts

@@ -69,9 +69,11 @@ A Telegram message 10 minutes before a home-village builder is free, for one acc
 2. Run the deploy command above. It asks for the bot token and your player tag, waits for you to
    send `/start` to the bot, saves `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` and `ALERT_PLAYER_TAG`
    in `.env.local`, sends a test message and starts the `coc-alerts` service.
-3. Every time you start an upgrade, copy the export again and paste it on `/tracker`. The page sends
-   it to `POST /api/alerts` (only the `ALERT_PLAYER_TAG` account is accepted), which saves it to
-   `.data/alerts.json`; [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) picks it up.
+3. Every time you start an upgrade, copy the export again and either paste it in the bot's chat
+   (Telegram splits it into several messages of up to 4096 characters; the bot joins them), send it
+   as a `.json`/`.txt` file, or paste it on `/tracker`, which sends it to `POST /api/alerts`. Only the
+   `ALERT_PLAYER_TAG` account is accepted. The export is saved to `.data/alerts.json` and
+   [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) picks it up.
 4. For each new export the bot asks whether a boost is running. Reply with the time left, e.g.
    `potion 2h 41m`, `bite 45m`, `potion 2h 41m bite 45m` or `no`. Without a reply it uses
    `boosts.builder_boost` from the export. The export's timers are the time left at normal speed;
