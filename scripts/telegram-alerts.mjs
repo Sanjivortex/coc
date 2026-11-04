@@ -132,7 +132,8 @@ export function clock(unix) {
 export function span(seconds) {
   const m = Math.max(0, Math.round(seconds / 60));
   const h = Math.floor(m / 60);
-  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+  if (h === 0) return `${m}m`;
+  return m % 60 > 0 ? `${h}h ${m % 60}m` : `${h}h`;
 }
 
 function minutes(seconds) {
@@ -186,16 +187,63 @@ const REPLY_HELP = [
   '• no (koi boost nahi)',
 ].join('\n');
 
+// Boost question with buttons: kind (potion / bite / both / none), then time left for each.
+// Button data is "<flow id>|<answer>" so buttons of an older question are ignored.
+
+const KIND_LABEL = { potion: '🧪 Builder Potion', bite: '🍪 Builder Bite', both: '🧪 + 🍪 Dono', none: '❌ Koi boost nahi' };
+const TIME_BUTTONS = {
+  potion: [
+    [3600, 7200, 10800],
+    [14400, 18000, 21600],
+  ],
+  bite: [
+    [900, 1800, 2700],
+    [3600, 7200, 10800],
+  ],
+};
+
+const button = (flowId, text, answer) => ({ text, callback_data: `${flowId}|${answer}` });
+
+/** First message after an export: what was found and which boost is running. */
 export function askText(upgrades, boosts, now) {
   return [
     `📥 Export mila: ${upgrades.length} builder upgrade chal rahe.`,
     `Export ke hisaab se: ${boostLine(boosts, now)}.`,
     '',
-    'Kya abhi Builder Potion ya Builder Bite chalu hai?',
-    REPLY_HELP,
-    '',
-    'Reply nahi kiya toh export wala time use hoga. /status se time dekh sakte ho.',
+    'Abhi kaunsa boost chalu hai?',
   ].join('\n');
+}
+
+export function kindKeyboard(flowId) {
+  return { inline_keyboard: ['potion', 'bite', 'both', 'none'].map((k) => [button(flowId, KIND_LABEL[k], `k:${k}`)]) };
+}
+
+/** "Time left" question for `step` ('potion' | 'bite'); `exportLeft` adds a button with the export's potion time. */
+export function timeQuestion(step, flowId, exportLeft = 0) {
+  const text =
+    step === 'potion'
+      ? '🧪 Builder Potion kitna time bacha hai?\n1 potion = 1 ghanta. Button dabao ya type karo, jaise 2h 41m.'
+      : '🍪 Builder Bite kitna time bacha hai?\n1 bite = 1 ghanta. Button dabao ya type karo, jaise 45m.';
+  const rows = TIME_BUTTONS[step].map((row) => row.map((s) => button(flowId, span(s), `t:${s}`)));
+  if (step === 'potion' && exportLeft > 60) rows.push([button(flowId, `Export wala (${span(exportLeft)})`, `t:${Math.round(exportLeft)}`)]);
+  return { text, reply_markup: { inline_keyboard: rows } };
+}
+
+/**
+ * Applies one answer to the question flow. Returns the next flow, or `{ done: answers }` when every
+ * boost has its time (answers: seconds left per boost, 0 = not running).
+ */
+export function nextFlow(flow, answer) {
+  const answers = { ...flow.answers };
+  let kinds = flow.kinds;
+  if (answer.kind) {
+    kinds = answer.kind === 'both' ? ['potion', 'bite'] : answer.kind === 'none' ? [] : [answer.kind];
+    for (const k of ['potion', 'bite']) if (!kinds.includes(k)) answers[k] = 0;
+  } else if (flow.step) {
+    answers[flow.step] = answer.seconds;
+  }
+  const step = kinds.find((k) => !(k in answers));
+  return step ? { ...flow, kinds, answers, step } : { done: answers };
 }
 
 export function statusText(upgrades, boosts, now) {
@@ -235,10 +283,10 @@ async function telegram(method, body, timeoutMs = 15_000) {
   return json.result;
 }
 
-function send(text) {
+function send(text, replyMarkup) {
   const chat = process.env.TELEGRAM_CHAT_ID;
   if (!chat) throw new Error('TELEGRAM_CHAT_ID is not set.');
-  return telegram('sendMessage', { chat_id: chat, text });
+  return telegram('sendMessage', { chat_id: chat, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) });
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +317,8 @@ async function run() {
   const nameOf = await gameNames();
   // offset: next Telegram update to read; sent: alert already sent per upgrade;
   // boosts: potion/bite end times for the export with timestamp `exportTs`.
-  const state = { offset: 0, sent: {}, exportTs: 0, boosts: null, ...(await readJson(STATE_FILE, {})) };
+  // flow: the boost question being answered with buttons (see nextFlow).
+  const state = { offset: 0, sent: {}, exportTs: 0, boosts: null, flow: null, ...(await readJson(STATE_FILE, {})) };
   const save = () => writeJson(STATE_FILE, state);
   let ex = null;
   let mtime = 0;
@@ -278,6 +327,54 @@ async function run() {
     upgrades = ex ? builderUpgrades(ex, nameOf, state.boosts ?? exportBoosts(ex)) : [];
   };
   console.log(`Watching ${ALERTS_FILE}, alert ${LEAD / 60} min before a builder is free.`);
+
+  const confirm = (now) => send(`✅ Theek hai: ${boostLine(state.boosts, now)}.\n\n${upgradeList(upgrades, now)}`);
+
+  /** Sets the boosts from answers (seconds left per boost) and shows the new finish times. */
+  const setBoosts = async (answers, now) => {
+    state.boosts = applyReply(state.boosts ?? exportBoosts(ex), answers, ex.timestamp, now);
+    state.flow = null;
+    recompute();
+    await save();
+    return confirm(now);
+  };
+
+  const askBoost = async (text) => {
+    state.flow = { id: String(Date.now()), kinds: [], answers: {}, step: null };
+    await save();
+    return send(text, kindKeyboard(state.flow.id));
+  };
+
+  /** One answer (a kind or a time) to the boost question: asks the next time or saves the boosts. */
+  const answerBoost = async (answer, now) => {
+    const next = nextFlow(state.flow, answer);
+    if (next.done) return setBoosts(next.done, now);
+    state.flow = next;
+    await save();
+    const q = timeQuestion(next.step, next.id, exportBoosts(ex).potionEnd - now);
+    return send(q.text, q.reply_markup);
+  };
+
+  const handleButton = async (cq) => {
+    await telegram('answerCallbackQuery', { callback_query_id: cq.id }).catch(() => {});
+    const [flowId, answer = ''] = String(cq.data ?? '').split('|');
+    if (!ex || !state.flow || state.flow.id !== flowId) return send('Yeh purana sawaal hai. Boost badalna hai toh /boost bhejo.');
+    const now = Math.floor(Date.now() / 1000);
+    const [type, value] = answer.split(':');
+    let picked;
+    if (type === 'k' && value in KIND_LABEL) picked = { kind: value, label: KIND_LABEL[value] };
+    else if (type === 't' && Number(value) > 0) picked = { seconds: Number(value), label: span(Number(value)) };
+    else return;
+    // Show the choice in the question and remove its buttons.
+    if (cq.message?.message_id) {
+      await telegram('editMessageText', {
+        chat_id: chatId,
+        message_id: cq.message.message_id,
+        text: `${cq.message.text ?? ''}\n\n→ ${picked.label}`,
+      }).catch(() => {});
+    }
+    return answerBoost(picked, now);
+  };
 
   const checkExport = async () => {
     const st = await stat(ALERTS_FILE).catch(() => null);
@@ -289,10 +386,9 @@ async function run() {
     const now = Math.floor(Date.now() / 1000);
     if (state.exportTs !== ex.timestamp || !state.boosts) {
       state.boosts = exportBoosts(ex);
-      recompute();
-      await send(askText(upgrades, state.boosts, now));
       state.exportTs = ex.timestamp;
-      await save();
+      recompute();
+      await askBoost(askText(upgrades, state.boosts, now));
     } else {
       recompute();
     }
@@ -356,25 +452,31 @@ async function run() {
     const now = Math.floor(Date.now() / 1000);
     if (await takePiece(text, now)) return;
     if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : `Abhi tak koi export nahi mila.\n\n${HOW_TO_EXPORT}`);
-    if (/^\/start\b/i.test(text)) return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status se time dekho.`);
+    if (/^\/start\b/i.test(text)) return send(`Bot chalu hai. Builder free hone se 10 min pehle yahan message aayega.\n\n${HOW_TO_EXPORT}\n\n/status se time dekho, /boost se boost badlo.`);
     if (/^\/(tracker|export|help)\b/i.test(text)) return send(HOW_TO_EXPORT);
+    if (/^\/boost\b/i.test(text)) return ex ? askBoost('Abhi kaunsa boost chalu hai?') : send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
     const reply = parseBoostReply(text);
-    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}\n\nExport ke liye /help bhejo.`);
+    if (!reply) return send(`Samjha nahi. Boost ke liye /boost, time ke liye /status, export ke liye /help bhejo.\n\n${REPLY_HELP}`);
     if (!ex) return send(`Pehle export bhejo.\n\n${HOW_TO_EXPORT}`);
-    state.boosts = applyReply(state.boosts ?? exportBoosts(ex), reply, ex.timestamp, now);
-    recompute();
-    await save();
-    return send(`✅ Theek hai: ${boostLine(state.boosts, now)}.\n\n${upgradeList(upgrades, now)}`);
+    // A typed time while the bot waits for one ("2h 41m") answers that question.
+    const plainTime = !/potion|boost|bite/i.test(text) && 'potion' in reply && !('bite' in reply) && reply.potion > 0;
+    if (state.flow?.step && plainTime) return answerBoost({ seconds: reply.potion }, now);
+    return setBoosts(reply, now);
   };
 
   const poll = async () => {
     const updates = await telegram(
       'getUpdates',
-      { offset: state.offset, timeout: POLL_SECONDS, allowed_updates: ['message'] },
+      { offset: state.offset, timeout: POLL_SECONDS, allowed_updates: ['message', 'callback_query'] },
       (POLL_SECONDS + 15) * 1000,
     );
     for (const u of updates) {
       state.offset = u.update_id + 1;
+      const cq = u.callback_query;
+      if (cq) {
+        if (String(cq.message?.chat?.id) === chatId) await handleButton(cq);
+        continue;
+      }
       const msg = u.message;
       // Only the owner's chat; anyone else who finds the bot is ignored.
       if (!msg || String(msg.chat?.id) !== chatId) continue;
