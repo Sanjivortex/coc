@@ -2,15 +2,18 @@
 // Telegram alert when a home-village builder is about to be free.
 //
 // The Upgrade Tracker page sends each pasted village export to POST /api/alerts, which saves it to
-// ALERTS_FILE. This worker reads that file every 30 seconds and sends one Telegram message when a
-// builder upgrade has ALERT_LEAD_MINUTES (default 10) or less left. Runs as the `coc-alerts`
-// systemd service (deploy/setup-vps.sh). No dependencies, plain Node.js 22.
+// ALERTS_FILE. This worker:
+//   - asks on Telegram, for every new export, whether a Builder Potion or Builder Bite is running
+//     and how long it has left (reply "potion 2h 41m", "bite 45m", both, or "no"),
+//   - sends one message when a builder upgrade has ALERT_LEAD_MINUTES (default 10) or less left,
+//   - answers /status with the finish times.
+// Runs as the `coc-alerts` systemd service (deploy/setup-vps.sh). No dependencies, Node.js 22.
 //
 //   node --env-file=.env.local scripts/telegram-alerts.mjs           run the worker
 //   node --env-file=.env.local scripts/telegram-alerts.mjs --check   check the bot token
 //   node --env-file=.env.local scripts/telegram-alerts.mjs --chat-id print the chat that sent /start
 //   node --env-file=.env.local scripts/telegram-alerts.mjs --test    send a test message
-//   node scripts/telegram-alerts.mjs --plan export.json              print the alert times, send nothing
+//   node scripts/telegram-alerts.mjs --plan export.json [reply]      print finish times, send nothing
 
 import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,12 +21,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ALERTS_FILE = process.env.ALERTS_FILE || path.join(ROOT, '.data', 'alerts.json');
-const STATE_FILE = path.join(path.dirname(ALERTS_FILE), 'alerts-sent.json');
+const STATE_FILE = path.join(path.dirname(ALERTS_FILE), 'alerts-state.json');
 const LEAD = Math.max(1, Number(process.env.ALERT_LEAD_MINUTES) || 10) * 60;
 const TIME_ZONE = process.env.ALERT_TIMEZONE || 'Asia/Kolkata';
-const TICK_MS = 30_000;
-/** A Builder Potion makes builders work this many times faster while `boosts.builder_boost` runs. */
-const POTION_SPEED = 10;
+/** Long-poll wait for Telegram replies; the alert check runs between polls. */
+const POLL_SECONDS = 25;
+
+// Builders work at 1× normally. A Builder Potion adds 9× (10× total), a Builder Bite adds 1×
+// (2× total), and both together give 11×. The export's timers are the time left at 1×.
+const POTION_EXTRA = 9;
+const BITE_EXTRA = 1;
 
 // ---------------------------------------------------------------------------
 // Export → builder upgrades with real finish times
@@ -42,27 +49,37 @@ async function gameNames() {
   return names;
 }
 
-/**
- * Seconds of real time to finish `work` seconds of upgrade time when the builders are boosted for
- * `boost` more seconds (the export's timers are the time left at normal speed).
- */
-export function realSeconds(work, boost) {
-  const boosted = boost * POTION_SPEED;
-  return work <= boosted ? work / POTION_SPEED : boost + (work - boosted);
+/** Boosts as absolute end times; a boost counts from the export's timestamp until its end. */
+export function exportBoosts(ex) {
+  return { potionEnd: ex.timestamp + (Number(ex.boosts?.builder_boost) || 0), biteEnd: ex.timestamp };
+}
+
+/** Unix time when `work` seconds (at 1×) are done, starting at `start` with the given boosts. */
+export function finishTime(start, work, { potionEnd, biteEnd }) {
+  let t = start;
+  let left = work;
+  for (const edge of [potionEnd, biteEnd].filter((e) => e > start).sort((a, b) => a - b)) {
+    if (edge <= t) continue;
+    const speed = 1 + (t < potionEnd ? POTION_EXTRA : 0) + (t < biteEnd ? BITE_EXTRA : 0);
+    const capacity = (edge - t) * speed;
+    if (left <= capacity) return t + left / speed;
+    left -= capacity;
+    t = edge;
+  }
+  return t + left;
 }
 
 /** Every running home-village builder upgrade in the export, soonest first. */
-export function builderUpgrades(ex, nameOf) {
+export function builderUpgrades(ex, nameOf, boosts = exportBoosts(ex)) {
   const out = [];
   const seen = new Map();
-  const boost = Number(ex.boosts?.builder_boost) || 0;
   const add = (id, level, timer) => {
     const name = nameOf.get(id);
     if (!name || typeof timer !== 'number' || timer <= 0) return;
     const base = `${id}:${level}`;
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
-    out.push({ key: `${base}:${n}`, name, level: level + 1, finishAt: Math.round(ex.timestamp + realSeconds(timer, boost)) });
+    out.push({ key: `${base}:${n}`, name, level: level + 1, finishAt: Math.round(finishTime(ex.timestamp, timer, boosts)) });
   };
   for (const section of ['buildings', 'traps', 'heroes', 'guardians']) {
     for (const e of ex[section] ?? []) {
@@ -73,12 +90,86 @@ export function builderUpgrades(ex, nameOf) {
   return out.sort((a, b) => a.finishAt - b.finishAt);
 }
 
+// ---------------------------------------------------------------------------
+// Text
+// ---------------------------------------------------------------------------
+
 export function clock(unix) {
   return new Date(unix * 1000).toLocaleString('en-IN', { timeZone: TIME_ZONE, weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
+/** "2h 41m", "45m". */
+export function span(seconds) {
+  const m = Math.max(0, Math.round(seconds / 60));
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+}
+
 function minutes(seconds) {
   return Math.max(1, Math.ceil(seconds / 60));
+}
+
+/**
+ * Reads a reply about running boosts. "2h 41m" or "potion 2h 41m" → potion, "bite 45m" → bite,
+ * both can be in one message, "no" → nothing running. Returns null when it is not a boost reply.
+ */
+export function parseBoostReply(text) {
+  const t = text.toLowerCase().trim();
+  if (/^(no|nahi|nahin|nhi|nai|none|0)\b/.test(t)) return { potion: 0, bite: 0 };
+  const out = {};
+  // Units end at a non-letter so "2h41m" works as well as "2h 41m".
+  for (const m of t.matchAll(/(potion|boost|bite)?[\s:=-]*((?:\d+\s*(?:hours|hour|hrs|hr|h|ghante|ghanta|minutes|minute|mins|min|m)(?![a-z])\s*)+)/g)) {
+    const h = /(\d+)\s*(?:hours|hour|hrs|hr|h|ghante|ghanta)(?![a-z])/.exec(m[2]);
+    const mm = /(\d+)\s*(?:minutes|minute|mins|min|m)(?![a-z])/.exec(m[2]);
+    const seconds = (h ? Number(h[1]) * 3600 : 0) + (mm ? Number(mm[1]) * 60 : 0);
+    out[m[1] === 'bite' ? 'bite' : 'potion'] = seconds;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** New boosts after a reply at `now`: a mentioned boost ends `now + time left`, others stay. */
+export function applyReply(boosts, reply, exportTs, now) {
+  const next = { ...boosts };
+  if ('potion' in reply) next.potionEnd = reply.potion > 0 ? now + reply.potion : exportTs;
+  if ('bite' in reply) next.biteEnd = reply.bite > 0 ? now + reply.bite : exportTs;
+  return next;
+}
+
+function boostLine({ potionEnd, biteEnd }, now) {
+  const parts = [];
+  if (potionEnd > now) parts.push(`Builder Potion ${span(potionEnd - now)} (${clock(potionEnd)} tak)`);
+  if (biteEnd > now) parts.push(`Builder Bite ${span(biteEnd - now)} (${clock(biteEnd)} tak)`);
+  return parts.length > 0 ? parts.join(' + ') : 'koi boost nahi';
+}
+
+function upgradeList(upgrades, now, limit = 10) {
+  const list = upgrades.filter((u) => u.finishAt > now).slice(0, limit);
+  if (list.length === 0) return 'Koi builder upgrade nahi chal raha.';
+  return list.map((u) => `• ${u.name} → lvl ${u.level}: ${clock(u.finishAt)} (${span(u.finishAt - now)})`).join('\n');
+}
+
+const REPLY_HELP = [
+  'Reply karo kitna time bacha hai:',
+  '• potion 2h 41m',
+  '• bite 45m',
+  '• potion 2h 41m bite 45m',
+  '• no (koi boost nahi)',
+].join('\n');
+
+export function askText(upgrades, boosts, now) {
+  return [
+    `📥 Export mila: ${upgrades.length} builder upgrade chal rahe.`,
+    `Export ke hisaab se: ${boostLine(boosts, now)}.`,
+    '',
+    'Kya abhi Builder Potion ya Builder Bite chalu hai?',
+    REPLY_HELP,
+    '',
+    'Reply nahi kiya toh export wala time use hoga. /status se time dekh sakte ho.',
+  ].join('\n');
+}
+
+export function statusText(upgrades, boosts, now) {
+  return `Boost: ${boostLine(boosts, now)}\n\n${upgradeList(upgrades, now)}`;
 }
 
 /** Upgrades whose alert is due now and was not sent yet (the same upgrade from a newer export counts as sent). */
@@ -100,14 +191,14 @@ export function alertText(due, now) {
 // Telegram
 // ---------------------------------------------------------------------------
 
-async function telegram(method, body) {
+async function telegram(method, body, timeoutMs = 15_000) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not set.');
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body ?? {}),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const json = await res.json().catch(() => ({}));
   if (!json.ok) throw new Error(`Telegram ${method}: ${json.description ?? res.status}`);
@@ -144,38 +235,90 @@ async function run() {
     console.log('Telegram is not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID); nothing to do.');
     return;
   }
+  const chatId = String(process.env.TELEGRAM_CHAT_ID);
   const nameOf = await gameNames();
+  // offset: next Telegram update to read; sent: alert already sent per upgrade;
+  // boosts: potion/bite end times for the export with timestamp `exportTs`.
+  const state = { offset: 0, sent: {}, exportTs: 0, boosts: null, ...(await readJson(STATE_FILE, {})) };
+  const save = () => writeJson(STATE_FILE, state);
+  let ex = null;
   let mtime = 0;
   let upgrades = [];
-  let sent = await readJson(STATE_FILE, {});
+  const recompute = () => {
+    upgrades = ex ? builderUpgrades(ex, nameOf, state.boosts ?? exportBoosts(ex)) : [];
+  };
   console.log(`Watching ${ALERTS_FILE}, alert ${LEAD / 60} min before a builder is free.`);
 
-  const tick = async () => {
+  const checkExport = async () => {
     const st = await stat(ALERTS_FILE).catch(() => null);
-    if (st && st.mtimeMs !== mtime) {
-      mtime = st.mtimeMs;
-      const saved = await readJson(ALERTS_FILE, null);
-      upgrades = saved?.export ? builderUpgrades(saved.export, nameOf) : [];
-      console.log(`Loaded export of ${saved?.export?.tag}: ${upgrades.length} builder upgrades running.`);
-    }
+    if (!st || st.mtimeMs === mtime) return;
+    const saved = await readJson(ALERTS_FILE, null);
+    if (!saved?.export) return;
+    mtime = st.mtimeMs;
+    ex = saved.export;
     const now = Math.floor(Date.now() / 1000);
-    const due = dueAlerts(upgrades, sent, now);
+    if (state.exportTs !== ex.timestamp || !state.boosts) {
+      state.boosts = exportBoosts(ex);
+      recompute();
+      await send(askText(upgrades, state.boosts, now));
+      state.exportTs = ex.timestamp;
+      await save();
+    } else {
+      recompute();
+    }
+    console.log(`Export of ${ex.tag}: ${upgrades.length} builder upgrades running.`);
+  };
+
+  const checkAlerts = async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const due = dueAlerts(upgrades, state.sent, now);
     if (due.length === 0) return;
     await send(alertText(due, now));
-    for (const u of due) sent[u.key] = u.finishAt;
+    for (const u of due) state.sent[u.key] = u.finishAt;
     // Forget alerts for upgrades that finished more than a day ago.
-    sent = Object.fromEntries(Object.entries(sent).filter(([, t]) => t > now - 86400));
-    await writeJson(STATE_FILE, sent);
-    console.log(`Sent: ${due.map((u) => u.name).join(', ')}`);
+    state.sent = Object.fromEntries(Object.entries(state.sent).filter(([, t]) => t > now - 86400));
+    await save();
+    console.log(`Alert sent: ${due.map((u) => u.name).join(', ')}`);
+  };
+
+  const handle = async (text) => {
+    const now = Math.floor(Date.now() / 1000);
+    if (/^\/status\b/i.test(text)) return send(ex ? statusText(upgrades, state.boosts, now) : 'Abhi tak koi export nahi mila. /tracker pe paste karo.');
+    if (/^\/start\b/i.test(text)) return send('Bot chalu hai. Upgrade lagao, export /tracker pe paste karo, main 10 min pehle bataunga. /status se time dekho.');
+    const reply = parseBoostReply(text);
+    if (!reply) return send(`Samjha nahi. ${REPLY_HELP}`);
+    if (!ex) return send('Pehle export /tracker pe paste karo.');
+    state.boosts = applyReply(state.boosts ?? exportBoosts(ex), reply, ex.timestamp, now);
+    recompute();
+    await save();
+    return send(`✅ Theek hai: ${boostLine(state.boosts, now)}.\n\n${upgradeList(upgrades, now)}`);
+  };
+
+  const poll = async () => {
+    const updates = await telegram(
+      'getUpdates',
+      { offset: state.offset, timeout: POLL_SECONDS, allowed_updates: ['message'] },
+      (POLL_SECONDS + 15) * 1000,
+    );
+    for (const u of updates) {
+      state.offset = u.update_id + 1;
+      const msg = u.message;
+      // Only the owner's chat; anyone else who finds the bot is ignored.
+      if (!msg?.text || String(msg.chat?.id) !== chatId) continue;
+      await handle(msg.text);
+    }
+    if (updates.length > 0) await save();
   };
 
   for (;;) {
     try {
-      await tick();
+      await checkExport();
+      await checkAlerts();
+      await poll();
     } catch (e) {
       console.error(e instanceof Error ? e.message : e);
+      await new Promise((r) => setTimeout(r, 10_000));
     }
-    await new Promise((r) => setTimeout(r, TICK_MS));
   }
 }
 
@@ -194,13 +337,18 @@ async function main(args) {
       return;
     }
     case '--test':
-      await send('✅ CoC builder alerts chalu hain. Builder free hone se pehle yahan message aayega.');
+      await send('✅ CoC builder alerts chalu hain. Builder free hone se pehle yahan message aayega. /status se time dekho.');
       console.log('Test message sent.');
       return;
     case '--plan': {
       const ex = JSON.parse(await readFile(args[1], 'utf8'));
-      const list = builderUpgrades(ex, await gameNames());
-      for (const u of list) console.log(`${u.name} → lvl ${u.level}: free ${clock(u.finishAt)}, alert ${clock(u.finishAt - LEAD)}`);
+      let boosts = exportBoosts(ex);
+      const reply = args[2] ? parseBoostReply(args.slice(2).join(' ')) : null;
+      if (reply) boosts = applyReply(boosts, reply, ex.timestamp, ex.timestamp);
+      console.log(`Boost (from export time): ${boostLine(boosts, ex.timestamp)}`);
+      for (const u of builderUpgrades(ex, await gameNames(), boosts)) {
+        console.log(`${u.name} → lvl ${u.level}: free ${clock(u.finishAt)}, alert ${clock(u.finishAt - LEAD)}`);
+      }
       return;
     }
     default:

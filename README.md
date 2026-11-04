@@ -71,8 +71,12 @@ A Telegram message 10 minutes before a home-village builder is free, for one acc
    in `.env.local`, sends a test message and starts the `coc-alerts` service.
 3. Every time you start an upgrade, copy the export again and paste it on `/tracker`. The page sends
    it to `POST /api/alerts` (only the `ALERT_PLAYER_TAG` account is accepted), which saves it to
-   `.data/alerts.json`; [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) checks it every
-   30 seconds. Running Builder Potions (`boosts.builder_boost` in the export) are counted at 10×.
+   `.data/alerts.json`; [`scripts/telegram-alerts.mjs`](scripts/telegram-alerts.mjs) picks it up.
+4. For each new export the bot asks whether a boost is running. Reply with the time left, e.g.
+   `potion 2h 41m`, `bite 45m`, `potion 2h 41m bite 45m` or `no`. Without a reply it uses
+   `boosts.builder_boost` from the export. The export's timers are the time left at normal speed;
+   builders work 10× with a Builder Potion, 2× with a Builder Bite and 11× with both, counted from
+   the export's time until the end you gave. `/status` lists the finish times.
 
 Optional: `ALERT_LEAD_MINUTES` (default 10), `ALERT_TIMEZONE` (default `Asia/Kolkata`).
 Logs: `journalctl -u coc-alerts -f`. Preview the alert times for an export without sending anything:
