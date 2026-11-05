@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Cinzel, Geist, Geist_Mono } from 'next/font/google';
 import { SiteHeader } from '@/components/SiteHeader';
 import { GAME_DATA_SOURCE } from '@/lib/gamedata';
 import './globals.css';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
+const cinzel = Cinzel({ variable: '--font-cinzel', subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: { default: 'CoC Stats – Clash of Clans progress and upgrade planner', template: '%s · CoC Stats' },
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} h-full`}>
       <body className="flex min-h-full flex-col font-sans">
         <SiteHeader />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6">{children}</main>

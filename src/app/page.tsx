@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CalendarClock, FileUp, Hammer, Swords } from 'lucide-react';
-import { CloudSky } from '@/components/CloudSky';
+import { KingdomScene } from '@/components/KingdomScene';
 import { TagSearch } from '@/components/TagSearch';
 import { buttonClass } from '@/components/ui/styles';
 import { Panel } from '@/components/ui/display';
@@ -51,16 +51,17 @@ export default function Home() {
   const max = Math.max(...example.rows.map((r) => r.time));
   return (
     <div className="pb-8">
-      <section className="relative -mx-4 overflow-hidden px-4 pb-16 pt-14 text-center sm:-mx-6 sm:px-6 sm:pt-20">
-        <CloudSky />
-        <div className="relative mx-auto max-w-3xl">
+      <section className="relative -mx-4 overflow-hidden px-4 pt-14 sm:-mx-6 sm:px-6 sm:pt-20">
+        <KingdomScene />
+        <div className="relative mx-auto max-w-3xl pb-60 text-center sm:pb-72">
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-panel/70 px-3 py-1 text-xs text-ink-2 backdrop-blur">
             <span className="h-1.5 w-1.5 rounded-full bg-good" aria-hidden />
             Updated for Town Hall {MAX_TH}
           </span>
-          <h1 className="mt-5 text-balance text-4xl font-semibold tracking-tight sm:text-6xl">
-            Know exactly when you&apos;ll be{' '}
-            <span className="bg-gradient-to-b from-[#ffe29a] via-[#f7cf5e] to-[#e9a91f] bg-clip-text text-transparent">maxed</span>
+          <p className="ribbon mt-6 justify-center">Chief, your kingdom awaits</p>
+          <h1 className="font-display mt-3 text-balance text-5xl font-bold tracking-wide sm:text-7xl">
+            Enter the{' '}
+            <span className="bg-gradient-to-b from-[#ffe29a] via-[#f7cf5e] to-[#e9a91f] bg-clip-text text-transparent">Kingdom</span>
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-[15px] text-ink-2">
             Clash of Clans stats with an upgrade planner built in: every hero, pet and building timed with your builders, potions, Gold Pass
@@ -95,6 +96,7 @@ export default function Home() {
 
       <section className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel
+          className="panel-ornate"
           title={`Example: Archer Queen 97 → ${example.chain.to} at Town Hall 18`}
           description={`${example.chain.steps.length} upgrades of 8 days · ${(example.cost / 1e6).toFixed(1)}M Dark Elixir`}
         >
@@ -122,7 +124,7 @@ export default function Home() {
           </p>
         </Panel>
 
-        <Panel title="Add defenses, walls and live timers" description="The official API leaves buildings out. The game can export them.">
+        <Panel className="panel-ornate" title="Add defenses, walls and live timers" description="The official API leaves buildings out. The game can export them.">
           <ol className="space-y-2.5 text-[13px]">
             {['Open Settings in Clash of Clans', 'Tap More Settings', 'Scroll to Data Export and tap Copy', 'Paste it into the Upgrade Tracker'].map((s, i) => (
               <li key={s} className="flex items-center gap-3">

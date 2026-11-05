@@ -57,8 +57,10 @@ function ClanView({ clan, demo }: { clan: ApiClan; demo: boolean }) {
   ];
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-4">
+      <section className="panel-ornate relative rounded-2xl border border-line bg-panel/70 p-5">
+        <span className="ribbon mb-3">Clan Castle</span>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
           {clan.badgeUrls.medium ? (
             <Image src={clan.badgeUrls.medium} alt="" width={64} height={64} className="h-16 w-16 shrink-0" priority />
           ) : (
@@ -78,14 +80,15 @@ function ClanView({ clan, demo }: { clan: ApiClan; demo: boolean }) {
             {clan.description && <p className="mt-2 max-w-2xl whitespace-pre-line text-[13px] text-ink-2">{clan.description}</p>}
           </div>
         </div>
-        <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-          {stats.map(([label, value]) => (
-            <div key={label} className="min-w-0">
-              <dt className="truncate text-xs text-ink-3">{label}</dt>
-              <dd className="tnum mt-0.5 truncate text-[15px] font-semibold">{value}</dd>
-            </div>
-          ))}
-        </dl>
+          <dl className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            {stats.map(([label, value]) => (
+              <div key={label} className="min-w-0">
+                <dt className="truncate text-xs text-ink-3">{label}</dt>
+                <dd className="tnum mt-0.5 truncate text-[15px] font-semibold">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </section>
 
       <Panel

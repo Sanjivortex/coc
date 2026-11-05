@@ -59,6 +59,7 @@
   --color-info: var(--info);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-cinzel), "Times New Roman", serif;
 }
 
 html {
@@ -297,5 +298,141 @@ input[type='number']::-webkit-outer-spin-button {
   }
   75% {
     content: "...";
+  }
+}
+/* ---------------------------------------------------------------------------
+   Kingdom theme: ornate gold frames, ribbon labels, torch light, embers,
+   the moon and waving flags. All artwork is original CSS/SVG.
+--------------------------------------------------------------------------- */
+
+/* Double gold frame, like a plaque in the castle. */
+.panel-ornate {
+  position: relative;
+  box-shadow:
+    inset 0 0 0 1px rgba(240, 180, 41, 0.22),
+    0 12px 32px -16px rgba(0, 0, 0, 0.6);
+}
+.panel-ornate::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(240, 180, 41, 0.14);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Small medieval section label with gold side rules. */
+.ribbon {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-cinzel), "Times New Roman", serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold-2);
+}
+.ribbon::before,
+.ribbon::after {
+  content: "";
+  height: 1px;
+  width: 26px;
+  background: linear-gradient(90deg, transparent, rgba(240, 180, 41, 0.55));
+}
+.ribbon::after {
+  transform: scaleX(-1);
+}
+
+/* Moon in the hero sky. */
+.moon {
+  position: absolute;
+  top: 10%;
+  right: 12%;
+  height: 60px;
+  width: 60px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 35%, #f4e9c8, #d9c68f 60%, #b09a5f);
+  box-shadow:
+    0 0 40px rgba(244, 233, 200, 0.35),
+    0 0 120px rgba(244, 233, 200, 0.15);
+  opacity: 0.9;
+}
+
+/* Embers rising from the castle torches. */
+.ember {
+  position: absolute;
+  bottom: 22%;
+  height: 4px;
+  width: 4px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, #ffd76a 0%, rgba(255, 158, 64, 0) 70%);
+  opacity: 0;
+}
+.e1 { left: 44%; }
+.e2 { left: 48%; }
+.e3 { left: 52%; }
+.e4 { left: 56%; }
+.e5 { left: 50%; }
+
+/* SVG elements animated from CSS. */
+.flag {
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ember {
+    animation: ember-rise 5s ease-in infinite;
+  }
+  .e2 { animation-delay: 1.4s; }
+  .e3 { animation-delay: 2.6s; }
+  .e4 { animation-delay: 0.8s; }
+  .e5 { animation-delay: 2s; }
+  .flicker {
+    animation: torch-flicker 2.4s ease-in-out infinite;
+  }
+  .f2 { animation-delay: 0.7s; }
+  .f3 { animation-delay: 1.3s; }
+  .f4 { animation-delay: 0.4s; }
+  .f5 { animation-delay: 1.9s; }
+  .flag {
+    animation: flag-wave 3.2s ease-in-out infinite;
+  }
+}
+
+@keyframes ember-rise {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-190px) translateX(24px);
+    opacity: 0;
+  }
+}
+@keyframes torch-flicker {
+  0%, 100% {
+    opacity: 0.85;
+  }
+  30% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.7;
+  }
+  75% {
+    opacity: 0.95;
+  }
+}
+@keyframes flag-wave {
+  0%, 100% {
+    transform: skewY(-5deg);
+  }
+  50% {
+    transform: skewY(5deg);
   }
 }
