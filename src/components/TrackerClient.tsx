@@ -94,7 +94,8 @@ export function TrackerClient() {
     <div>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Upgrade Tracker</h1>
+          <span className="ribbon">Builder&apos;s War Room</span>
+          <h1 className="font-display mt-1.5 text-2xl font-bold tracking-wide sm:text-3xl">Upgrade Tracker</h1>
           <p className="mt-1 text-[13px] text-ink-3">Every building, trap, wall and running timer from the game&apos;s village export. Saved only in this browser.</p>
         </div>
         {Object.keys(saved).length > 0 && (

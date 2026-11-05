@@ -19,8 +19,10 @@ export function PlayerHeader({ player, demo }: { player: ApiPlayer; demo: boolea
     ['Capital gold', formatCompact(player.clanCapitalContributions ?? 0)],
   ];
   return (
-    <section className="mb-2 flex flex-col gap-6 pb-4 lg:flex-row lg:items-center">
-      <div className="flex min-w-0 flex-1 items-center gap-4">
+    <section className="panel-ornate relative mb-4 rounded-2xl border border-line bg-panel/70 p-5">
+      <span className="ribbon mb-3">Player Journey</span>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
         <Image
           src={`/game/home/town-hall/normal/level-${Math.min(player.townHallLevel, 18)}.webp`}
           alt={`Town Hall ${player.townHallLevel}`}
@@ -75,14 +77,15 @@ export function PlayerHeader({ player, demo }: { player: ApiPlayer; demo: boolea
           )}
         </div>
       </div>
-      <dl className="grid shrink-0 grid-cols-3 gap-x-6 gap-y-3 sm:grid-cols-6">
-        {stats.map(([label, value]) => (
-          <div key={label} className="min-w-0">
-            <dt className="truncate text-xs text-ink-3">{label}</dt>
-            <dd className="tnum mt-0.5 text-[15px] font-semibold">{value}</dd>
-          </div>
-        ))}
-      </dl>
+        <dl className="grid shrink-0 grid-cols-3 gap-x-6 gap-y-3 sm:grid-cols-6">
+          {stats.map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="truncate text-xs text-ink-3">{label}</dt>
+              <dd className="tnum mt-0.5 text-[15px] font-semibold">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
     </section>
   );
 }

@@ -78,7 +78,15 @@ A Telegram message 10 minutes before a home-village builder is free, for one acc
    Bite, both, none), then the time left for each (1h…6h for potions, 15m…3h for bites, the
    export's potion time, or a typed time like `2h 41m`). `/boost` asks again; typed replies such as
    `potion 2h 41m bite 45m` or `no` work at any time. Without an answer it uses
-   `boosts.builder_boost` from the export. The export's timers are the time left at normal speed;
+   `boosts.builder_boost` from the export.
+5. The status list also shows every running upgrade's **next level cost** and, once the bot knows
+   your resources, whether you can afford it or how much more to loot. Commands:
+   - `/loot` — set your Gold, Elixir and Dark Elixir (`g 12.5m e 8m d 180k`); the bot asks once
+     after an export and again when the amounts are 12 hours old. `/skip` skips the question.
+   - `/pass` — Gold Pass builder boost (0/10/15/20%): next costs are discounted by it.
+   - `/jam` — Hammer Jam days left: upgrades whose builder frees before the jam ends cost half.
+   The export's timers for running upgrades are already discounted by the game; the discounts are
+   only applied to the next level's cost. The export's timers are the time left at normal speed;
    builders work 10× with a Builder Potion, 2× with a Builder Bite and 11× with both, counted from
    the export's time until the end you gave. `/status` lists the finish times.
 
