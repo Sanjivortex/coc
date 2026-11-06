@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third-party build (three.js), minified.
+    "public/vendor/**",
   ]),
 ]);
 

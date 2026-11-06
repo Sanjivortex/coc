@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gold Mine in 3D · CoC Stats</title>
+    <meta name="description" content="A level 1 Clash of Clans Gold Mine as an interactive 3D model." />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        color: #eef2fd;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        background:
+          radial-gradient(900px 560px at 50% 45%, rgba(63, 94, 180, 0.3), transparent 70%),
+          #06080f;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+      }
+      #stage canvas {
+        display: block;
+        touch-action: none;
+        cursor: grab;
+      }
+      #stage canvas:active {
+        cursor: grabbing;
+      }
+      header {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        pointer-events: none;
+      }
+      header > * {
+        pointer-events: auto;
+      }
+      h1 {
+        margin: 0;
+        font: 700 22px/1.2 Georgia, 'Times New Roman', serif;
+        letter-spacing: 0.04em;
+        color: #f7cf5e;
+      }
+      header p {
+        margin: 4px 0 0;
+        font-size: 13px;
+        color: #aab6d6;
+      }
+      a {
+        color: #f0b429;
+      }
+      figure {
+        margin: 0;
+        padding: 8px;
+        text-align: center;
+        background: rgba(12, 17, 32, 0.8);
+        border: 1px solid #1d2740;
+        border-radius: 12px;
+      }
+      figure img {
+        display: block;
+        width: 96px;
+        height: auto;
+      }
+      figcaption {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #6f7d9d;
+      }
+      .hint {
+        position: fixed;
+        bottom: 16px;
+        left: 0;
+        right: 0;
+        margin: 0;
+        text-align: center;
+        font-size: 12px;
+        color: #6f7d9d;
+        pointer-events: none;
+      }
+      .error {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        font-size: 14px;
+        color: #aab6d6;
+      }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/vendor/three/three.module.min.js",
+          "three/addons/": "/vendor/three/addons/"
+        }
+      }
+    </script>
+    <link rel="modulepreload" href="/vendor/three/three.module.min.js" />
+  </head>
+  <body>
+    <div id="stage" role="img" aria-label="3D model of a level 1 Gold Mine: a timber mine entrance in a rocky hill with a cart full of gold"></div>
+    <header>
+      <div>
+        <h1>Gold Mine · Level 1</h1>
+        <p>3D prototype · <a href="/">CoC Stats</a></p>
+      </div>
+      <figure>
+        <img src="/game/home/resource-buildings/gold-mine/normal/level-1.webp" alt="Level 1 Gold Mine in the game" width="128" height="110" />
+        <figcaption>In the game</figcaption>
+      </figure>
+    </header>
+    <p class="hint">Drag to rotate · scroll or pinch to zoom</p>
+    <noscript><p class="error">Turn on JavaScript to see the 3D model.</p></noscript>
+    <script type="module">
+      import { createViewer } from './js/viewer.js';
+      import { buildGoldMine } from './js/gold-mine.js';
+
+      const stage = document.getElementById('stage');
+      try {
+        const viewer = createViewer(stage, { radius: 2.5, target: [0.05, 0.3, 0] });
+        const mine = buildGoldMine();
+        viewer.scene.add(mine.object);
+        viewer.onFrame(mine.update);
+      } catch (e) {
+        console.error(e);
+        stage.innerHTML = '<p class="error">This browser cannot show 3D (WebGL is off or not supported).</p>';
+      }
+    </script>
+  </body>
+</html>

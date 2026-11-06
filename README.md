@@ -94,6 +94,19 @@ Optional: `ALERT_LEAD_MINUTES` (default 10), `ALERT_TIMEZONE` (default `Asia/Kol
 Logs: `journalctl -u coc-alerts -f`. Preview the alert times for an export without sending anything:
 `node scripts/telegram-alerts.mjs --plan export.json`.
 
+## 3D buildings (prototype)
+
+`/3d/gold-mine.html` shows a level 1 Gold Mine as a 3D model you can rotate and zoom. The model is
+built from code (`public/3d/js/gold-mine.js`): boxes, cylinders and low-poly shapes after the look
+of the game's image, with no game files used. `public/3d/js/viewer.js` sets up the grass island, the
+game's camera angle, lights, shadows and a turntable that pauses while you drag.
+
+These are plain browser modules, served as static files. Next.js does not bundle them. three.js r187
+is vendored in `public/vendor/three/` (MIT, see its `LICENSE`): `build/three.module.js` and
+`build/three.core.js` bundled into one file with `bun build --minify`, plus the `OrbitControls` and
+`RoomEnvironment` addons as published. The page maps `three` and `three/addons/` to them with an
+import map.
+
 ## Where the data comes from
 
 - **Official API** (`GET /v1/players/{tag}`): heroes, hero equipment, pets, troops, spells, siege
