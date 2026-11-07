@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gold Mine in 3D · CoC Stats</title>
-    <meta name="description" content="A level 1 Clash of Clans Gold Mine as an interactive 3D model." />
+    <title>Gold Mine · Level 1 · 3D · CoC Stats</title>
+    <meta name="description" content="The level 1 Clash of Clans Gold Mine rebuilt in 3D from the game image, with GLB export." />
     <style>
       html,
       body {
@@ -13,9 +13,7 @@
         overflow: hidden;
         color: #eef2fd;
         font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
-        background:
-          radial-gradient(900px 560px at 50% 45%, rgba(63, 94, 180, 0.3), transparent 70%),
-          #06080f;
+        background: radial-gradient(900px 560px at 50% 45%, #2a3350, #0b0f1c 75%);
       }
       #stage {
         position: fixed;
@@ -50,12 +48,28 @@
         color: #f7cf5e;
       }
       header p {
-        margin: 4px 0 0;
+        margin: 4px 0 10px;
         font-size: 13px;
         color: #aab6d6;
       }
       a {
         color: #f0b429;
+      }
+      button {
+        margin-right: 6px;
+        padding: 7px 12px;
+        font: 600 13px system-ui, sans-serif;
+        color: #231600;
+        background: linear-gradient(#f7cf5e, #e9a91f);
+        border: 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 0 #8a5f00;
+        cursor: pointer;
+      }
+      button.secondary {
+        color: #eef2fd;
+        background: #18223a;
+        box-shadow: inset 0 0 0 1px #2b3a5f;
       }
       figure {
         margin: 0;
@@ -67,7 +81,7 @@
       }
       figure img {
         display: block;
-        width: 96px;
+        width: 128px;
         height: auto;
       }
       figcaption {
@@ -93,8 +107,15 @@
         place-items: center;
         padding: 24px;
         text-align: center;
-        font-size: 14px;
         color: #aab6d6;
+      }
+      html.shot,
+      html.shot body {
+        background: transparent;
+      }
+      html.shot header,
+      html.shot .hint {
+        display: none;
       }
     </style>
     <script type="importmap">
@@ -105,36 +126,533 @@
         }
       }
     </script>
-    <link rel="modulepreload" href="/vendor/three/three.module.min.js" />
   </head>
   <body>
-    <div id="stage" role="img" aria-label="3D model of a level 1 Gold Mine: a timber mine entrance in a rocky hill with a cart full of gold"></div>
+    <div id="stage" role="img" aria-label="3D model of the level 1 Gold Mine: a timber mine entrance, a stone cart and a crate full of gold"></div>
     <header>
       <div>
         <h1>Gold Mine · Level 1</h1>
-        <p>3D prototype · <a href="/">CoC Stats</a></p>
+        <p>3D, built from the game image · <a href="/">CoC Stats</a></p>
+        <button id="gameView" type="button" class="secondary">Game view</button>
+        <button id="export" type="button">Export GLB</button>
       </div>
       <figure>
         <img src="/game/home/resource-buildings/gold-mine/normal/level-1.webp" alt="Level 1 Gold Mine in the game" width="128" height="110" />
         <figcaption>In the game</figcaption>
       </figure>
     </header>
-    <p class="hint">Drag to rotate · scroll or pinch to zoom</p>
+    <p class="hint">Drag to rotate · scroll or pinch to zoom · Game view goes back to the image angle</p>
     <noscript><p class="error">Turn on JavaScript to see the 3D model.</p></noscript>
     <script type="module">
-      import { createViewer } from './js/viewer.js';
-      import { buildGoldMine } from './js/gold-mine.js';
+      import * as THREE from 'three';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+      import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+      const V3 = THREE.Vector3;
+
+      // ------------------------------------------------------------------------------------------
+      // Fit to the game image. The 188 × 162 px sprite is seen down the tile diagonal (azimuth 45°)
+      // from 43.5° above the ground (the cart rim is 0.69 times as tall as it is wide). 1 unit = 40 px
+      // of that image and the world origin sits at pixel (92, 76). +x points to the screen's lower
+      // right (the mine entrance faces it), +z to the lower left, y is up.
+      // ------------------------------------------------------------------------------------------
+      const REF = { w: 188, h: 162, k: 40, ox: 92, oy: 76, elev: THREE.MathUtils.degToRad(43.5) };
+      const PA = REF.k / Math.SQRT2;
+      const PB = (REF.k * Math.sin(REF.elev)) / Math.SQRT2;
+      const PC = REF.k * Math.cos(REF.elev);
+      /** World point at height y that the game image shows at pixel (px, py). */
+      const atH = (px, py, y = 0) => {
+        const d = (px - REF.ox) / PA;
+        const s = (py - REF.oy + PC * y) / PB;
+        return new V3((s + d) / 2, y, (s - d) / 2);
+      };
+
+      /** Ground height (flat: the image's dirt line matches y = 0 under every part). */
+      const ground = () => 0;
+
+      // ------------------------------------------------------------------------------------------
+      // Colors measured from the image (median of the pixels of each part). The lights below give
+      // top : right-facing : left-facing faces about 1 : 0.37 : 0.19, like the image.
+      // ------------------------------------------------------------------------------------------
+      const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, flatShading: true, ...extra });
+      const M = {
+        roof: [mat('#e5a55e'), mat('#b6753f'), mat('#bd7840')],
+        roofC: mat('#dc916a'),
+        cleat: mat('#c47a48'),
+        wall: [mat('#b2814e'), mat('#a77a47'), mat('#ac7c4b'), mat('#9f7544'), mat('#9c7040')],
+        post: mat('#a87444'),
+        ends: mat('#d2864c'),
+        postDark: mat('#6a4d37'),
+        rightWood: mat('#9d6747'),
+        interior: new THREE.MeshBasicMaterial({ color: '#110603' }),
+        vein: mat('#442600', { emissive: '#0e0700' }),
+        beam: mat('#2a1a0e'),
+        rock: mat('#e6cbb6'),
+        rubble: mat('#caab94'),
+        greyRock: mat('#9a8a80'),
+        dirt: mat('#4f2c10', { roughness: 1 }),
+        sleeper: mat('#775739'),
+        cartRim: mat('#64533e'),
+        cart: mat('#ccc0ae'),
+        wheel: mat('#506f84', { roughness: 0.6 }),
+        hub: mat('#1a2230'),
+        hole: new THREE.MeshBasicMaterial({ color: '#2a1d12' }),
+        gold: mat('#ffbc00', { roughness: 0.5, emissive: '#a05400', emissiveIntensity: 0.45 }),
+        crate: mat('#865b36'),
+        crateRim: mat('#c08868'),
+        cratePost: mat('#684829'),
+      };
+
+      // ------------------------------------------------------------------------------------------
+      // Geometry helpers. Every mesh is converted to separate triangles so the faceted, flat-shaded
+      // look survives in the GLB export too.
+      // ------------------------------------------------------------------------------------------
+      const model = new THREE.Group();
+      model.name = 'Gold Mine (level 1)';
+
+      function flat(geometry) {
+        const g = geometry.index ? geometry.toNonIndexed() : geometry;
+        g.deleteAttribute('uv');
+        g.computeVertexNormals();
+        return g;
+      }
+      function add(geometry, material, { cast = true, receive = true, parent = model } = {}) {
+        const mesh = new THREE.Mesh(flat(geometry), material);
+        mesh.castShadow = cast;
+        mesh.receiveShadow = receive;
+        parent.add(mesh);
+        return mesh;
+      }
+
+      let seed = 12345;
+      const rnd = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+      const jit = (a) => (rnd() - 0.5) * 2 * a;
+
+      /**
+       * Plank from the four corners of its top face (in order around the face), `thick` deep below
+       * that face, with chamfered (beveled) edges. `up` says which way the top face looks.
+       */
+      function slab(corners, thick, material, up = new V3(0, 1, 0), bevel = 0.022) {
+        const [p0, p1, , p3] = corners;
+        const u = p1.clone().sub(p0).normalize();
+        const n = p1.clone().sub(p0).cross(p3.clone().sub(p0)).normalize();
+        if (n.dot(up) < 0) n.negate();
+        const v = n.clone().cross(u);
+        const centre = corners.reduce((c, p) => c.add(p), new V3()).multiplyScalar(0.25);
+        const shape = new THREE.Shape(
+          corners.map((p) => {
+            const q = p.clone().sub(p0);
+            // Pull each corner toward the centre by the bevel so the beveled slab keeps its size.
+            const toC = centre.clone().sub(p).normalize().multiplyScalar(bevel * 1.4);
+            q.add(toC);
+            return new THREE.Vector2(q.dot(u), q.dot(v));
+          }),
+        );
+        const depth = Math.max(0.005, thick - 2 * bevel);
+        const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1 });
+        // Shape space (s, t, w) → world: p0 + s·u + t·v − (w + bevel)·n, so the top face lies on the corners.
+        const m = new THREE.Matrix4().makeBasis(u, v, n.clone().negate());
+        m.setPosition(p0.clone().addScaledVector(n, -bevel));
+        g.applyMatrix4(m);
+        return add(g, material);
+      }
+
+      /** Beveled beam from p0 to p1 with a width × height cross-section; `side` fixes its roll. */
+      function beam(p0, p1, width, height, material, side = new V3(0, 0, 1)) {
+        const dir = p1.clone().sub(p0);
+        const len = dir.length();
+        dir.normalize();
+        let w = side.clone().sub(dir.clone().multiplyScalar(side.dot(dir))).normalize();
+        if (w.lengthSq() < 0.5) w = new V3(1, 0, 0);
+        const h = dir.clone().cross(w);
+        const half = (a, b) => a.clone().multiplyScalar(b / 2);
+        const c = p0.clone().add(p1).multiplyScalar(0.5);
+        // Top face corners (offset by +h·height/2), the slab grows down by `height`.
+        const top = c.clone().add(half(h, height));
+        const corners = [
+          top.clone().sub(half(dir, len)).sub(half(w, width)),
+          top.clone().add(half(dir, len)).sub(half(w, width)),
+          top.clone().add(half(dir, len)).add(half(w, width)),
+          top.clone().sub(half(dir, len)).add(half(w, width)),
+        ];
+        return slab(corners, height, material, h, Math.min(0.02, width / 5, height / 5));
+      }
+
+      /** Rough rock: a subdivided icosahedron with every corner pushed in or out a little. */
+      function rock(centre, size, material, rough = 0.18) {
+        const g = new THREE.IcosahedronGeometry(1, 1);
+        const pos = g.attributes.position;
+        const moved = new Map();
+        for (let i = 0; i < pos.count; i++) {
+          const key = `${pos.getX(i).toFixed(3)},${pos.getY(i).toFixed(3)},${pos.getZ(i).toFixed(3)}`;
+          if (!moved.has(key)) moved.set(key, 1 + jit(rough));
+          const f = moved.get(key);
+          pos.setXYZ(i, pos.getX(i) * f * size.x, pos.getY(i) * f * size.y, pos.getZ(i) * f * size.z);
+        }
+        g.translate(centre.x, centre.y, centre.z);
+        return add(g, material);
+      }
+
+      const NUGGETS = [new THREE.IcosahedronGeometry(1, 0), new THREE.DodecahedronGeometry(1, 0), new THREE.OctahedronGeometry(1, 0)];
+      function nugget(at, size, parent = model) {
+        const g = NUGGETS[Math.floor(rnd() * 3)].clone();
+        g.scale(size * (0.9 + jit(0.2)), size * (0.75 + jit(0.15)), size * (0.9 + jit(0.2)));
+        g.rotateY(rnd() * 3);
+        g.rotateX(jit(0.5));
+        g.translate(at.x, at.y, at.z);
+        return add(g, M.gold, { parent });
+      }
+
+      /** Heap of gold nuggets on a rectangle (local x/z half sizes), peaking at `peak` above `base`. */
+      function goldHeap(parent, halfX, halfZ, base, peak, count, size) {
+        // Solid core so no gaps show between nuggets.
+        const core = new THREE.SphereGeometry(1, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+        core.scale(halfX * 0.95, peak * 0.85, halfZ * 0.95);
+        core.translate(0, base, 0);
+        add(core, M.gold, { parent });
+        for (let i = 0; i < count; i++) {
+          const u = jit(1);
+          const w = jit(1);
+          const h = Math.max(0, 1 - (u * u + w * w) * 0.6);
+          nugget(new V3(u * halfX * 0.9, base + peak * h * (0.75 + rnd() * 0.25), w * halfZ * 0.9), size * (0.8 + rnd() * 0.5), parent);
+        }
+      }
+
+      // ------------------------------------------------------------------------------------------
+      // Dirt patch: jagged outline traced from the image's lower edge (pixels), closed behind the mine.
+      // ------------------------------------------------------------------------------------------
+      {
+        const outline = [
+          [11, 76], [14, 82], [20, 85], [24, 91], [30, 95], [36, 99], [40, 105], [48, 109], [52, 114], [58, 119],
+          [66, 122], [72, 127], [78, 133], [88, 131], [98, 129], [106, 127], [114, 129], [124, 130], [130, 126],
+          [138, 121], [146, 112], [148, 106], [136, 88], [114, 56], [84, 40], [52, 44], [28, 60],
+        ].map(([px, py]) => {
+          let p = atH(px, py, 0);
+          for (let i = 0; i < 3; i++) p = atH(px, py, ground(p.x));
+          return p;
+        });
+        // Jagged edge: a small tooth between every pair of outline points.
+        const pts = [];
+        const c = outline.reduce((s, p) => s.add(p), new V3()).multiplyScalar(1 / outline.length);
+        outline.forEach((p, i) => {
+          const q = outline[(i + 1) % outline.length];
+          pts.push(p);
+          const mid = p.clone().add(q).multiplyScalar(0.5);
+          mid.add(mid.clone().sub(c).setY(0).normalize().multiplyScalar(i % 2 ? 0.05 : -0.05));
+          pts.push(mid);
+        });
+        const shape = new THREE.Shape(pts.map((p) => new THREE.Vector2(p.x, -p.z)));
+        const g = new THREE.ShapeGeometry(shape);
+        g.rotateX(-Math.PI / 2);
+        const pos = g.attributes.position;
+        for (let i = 0; i < pos.count; i++) pos.setY(i, ground(pos.getX(i)) + 0.005);
+        add(g, M.dirt, { cast: false });
+      }
+
+      // ------------------------------------------------------------------------------------------
+      // Timber mine. Left wall in the plane z = 1.48, 1.73 long, 0.78 high at the back and 1.77 at the
+      // front; the roof planks run across it and rise toward the entrance.
+      // ------------------------------------------------------------------------------------------
+      const XB = -0.97;
+      const XF = 0.76;
+      const ZL = 1.48;
+      const ZR = -0.31;
+      const yL = (x) => 0.78 + 0.572 * (x + 1.03); // top of the left wall
+      const yR = (x) => 0.66 + 0.55 * (x + 1.03); // top of the right wall
+      const STEP = 0.354;
+
+      /** Part of a polygon above the ground (planks parallel to the sloping roof end at y = 0). */
+      function aboveGround(poly, y0 = 0.005) {
+        const out = [];
+        poly.forEach((p, i) => {
+          const q = poly[(i + 1) % poly.length];
+          if (p.y >= y0) out.push(p);
+          if (p.y >= y0 !== q.y >= y0) out.push(p.clone().lerp(q, (y0 - p.y) / (q.y - p.y)));
+        });
+        return out;
+      }
+
+      // Left wall: five planks, their front ends stacked like logs.
+      for (let i = 0; i < 5; i++) {
+        const top = (x) => yL(x) - STEP * i + jit(0.012);
+        const bot = (x) => yL(x) - STEP * (i + 1) + 0.03;
+        const xf = XF + jit(0.02);
+        const poly = aboveGround([new V3(XB, top(XB), ZL), new V3(xf, top(xf), ZL), new V3(xf, bot(xf), ZL), new V3(XB, bot(XB), ZL)]);
+        if (poly.length >= 3) slab(poly, 0.14, M.wall[i], new V3(0, 0, 1));
+        // Lighter, redder end grain on the plank's front end (the stacked log ends in the image).
+        const t = Math.max(0.005, top(xf)), b = Math.max(0.005, bot(xf));
+        if (t - b > 0.05) beam(new V3(xf + 0.012, b + 0.01, ZL - 0.07), new V3(xf + 0.012, t - 0.01, ZL - 0.07), 0.15, 0.03, M.ends, new V3(0, 0, 1));
+      }
+
+      // Right wall: six planks whose front ends step forward going down (the slanted right frame).
+      {
+        const T = new V3(0.25, 1.37, 0);
+        const B = new V3(0.96, 0, 0);
+        const h = 1.37 / 6;
+        for (let j = 0; j < 6; j++) {
+          const f = (j + 0.5) / 6;
+          const xf = T.x + (B.x - T.x) * f + 0.05;
+          const z = ZR - 0.14 * f;
+          // Each plank is level at its front end (log-cabin ends) and follows the roof slope backward.
+          const yf = T.y - h * j;
+          const top = (x) => Math.min(yf, yR(x)) - 0.01;
+          const bot = (x) => top(x) - h + 0.025;
+          const poly = aboveGround([new V3(XB, top(XB), z), new V3(xf, top(xf), z), new V3(xf, bot(xf), z), new V3(XB, bot(XB), z)]);
+          if (poly.length >= 3) slab(poly, 0.14, M.rightWood, new V3(0, 0, -1));
+        }
+      }
+
+      // Roof: planks A and B across the walls, a slit, then the sagging front plank C.
+      const roofTop = (x, z) => {
+        const t = (ZL + 0.08 - z) / (ZL + 0.08 - (ZR + 0.04));
+        return yL(x) * (1 - t) + yR(x) * t + 0.12;
+      };
+      /** Roof plank by its x range at the left (eave) and right ends; `lift` raises the right end. */
+      const roofPlank = (xl0, xl1, xr0, xr1, material, lift = 0) => {
+        const zl = ZL + 0.08;
+        const zr = ZR + 0.04;
+        slab(
+          [new V3(xl0, roofTop(xl0, zl), zl), new V3(xl1, roofTop(xl1, zl), zl), new V3(xr1, roofTop(xr1, zr) + lift, zr), new V3(xr0, roofTop(xr0, zr) + lift, zr)],
+          0.12,
+          material,
+        );
+      };
+      roofPlank(-0.95, -0.45, -0.95, -0.66, M.roof[0]);
+      roofPlank(-0.41, 0.27, -0.61, -0.17, M.roof[1], 0.08);
+      roofPlank(0.43, 0.77, 0.03, 0.25, M.roofC, -0.03);
+      // Cleat on the back plank's far end and a nub on its back edge.
+      beam(new V3(-0.98, roofTop(-0.9, -0.15) + 0.07, -0.13), new V3(-0.74, roofTop(-0.8, -0.15) + 0.07, -0.13), 0.16, 0.11, M.cleat);
+      beam(new V3(-1.06, roofTop(-1.0, 0.87) - 0.02, 0.87), new V3(-0.95, roofTop(-0.95, 0.87) - 0.02, 0.87), 0.14, 0.1, M.cleat);
+
+      // Dark inside of the tunnel, seen through the entrance.
+      {
+        const x0 = -0.98;
+        const x1 = 0.5;
+        const zl = ZL - 0.15;
+        const zr = ZR + 0.15;
+        const v = [
+          [x0, ground(x0), zl], [x1, ground(x1), zl], [x1, ground(x1), zr], [x0, ground(x0), zr],
+          [x0, yL(x0), zl], [x1, yL(x1), zl], [x1, yR(x1), zr], [x0, yR(x0), zr],
+        ];
+        const faces = [[0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]];
+        const p = [];
+        for (const [a, b, c, d] of faces) for (const k of [a, b, c, a, c, d]) p.push(...v[k]);
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+        add(g, M.interior, { cast: false, receive: false });
+      }
+
+      // Inside the entrance: three dim gold veins, a fallen beam and a small grey rock.
+      for (let i = 0; i < 4; i++) {
+        beam(new V3(0.52, 1.3 - i * 0.2, 1.2 - i * 0.04), new V3(0.58, 0.2 - i * 0.08, 0.66 - i * 0.12), 0.13, 0.05, M.vein, new V3(1, 0, 0));
+      }
+      beam(new V3(0.45, 1.35, 0.95), new V3(0.6, 0.03, -0.04), 0.09, 0.09, M.beam, new V3(1, 0, 0));
+      rock(new V3(0.38, 0.5, 0.12), new V3(0.07, 0.06, 0.07), M.greyRock);
+
+      // Posts at the left of the entrance: a light door post and a short dark corner post.
+      beam(new V3(0.74, 0, 1.41), new V3(0.74, 0.9, 1.41), 0.15, 0.15, M.post, new V3(1, 0, 0));
+      beam(new V3(0.58, 0, 1.58), new V3(0.58, 0.62, 1.58), 0.13, 0.13, M.postDark, new V3(1, 0, 0));
+
+      // Hillside rock behind the right frame.
+      rock(new V3(0.41, 0.7, -0.59), new V3(0.18, 0.3, 0.13), M.rock);
+      rock(new V3(0.6, 0.4, -0.63), new V3(0.22, 0.32, 0.14), M.rock);
+      rock(new V3(0.86, 0.1, -0.52), new V3(0.18, 0.13, 0.12), M.rock);
+
+      // Sleepers across the track at the entrance and a rail under the cart.
+      for (const [x, z0, z1] of [[0.75, 0.52, 1.24], [0.92, 0.5, 1.25], [1.09, 0.62, 1.2]]) {
+        beam(new V3(x + jit(0.03), 0.03, z0), new V3(x + jit(0.03), 0.03, z1), 0.1, 0.05, M.sleeper, new V3(1, 0, 0));
+      }
+      for (const z of [0.1, 0.7]) beam(new V3(0.55, 0.025, z), new V3(1.95, 0.025, z), 0.04, 0.04, M.sleeper, new V3(0, 0, 1));
+
+      // Rubble: white-pink pile in front, grey stones at the back-left, a few small white ones.
+      for (const [x, z, r] of [[1.05, 1.45, 0.2], [1.27, 1.6, 0.16], [0.93, 1.72, 0.13], [1.32, 1.34, 0.11], [1.15, 1.78, 0.09]]) {
+        rock(new V3(x, r * 0.35, z), new V3(r, r * 0.7, r), M.rubble);
+      }
+      // Grey stones at the back-left tip (image px 10-22, 68-86 → ground around (-1.32, 1.37)).
+      rock(new V3(-1.33, 0.06, 1.36), new V3(0.15, 0.12, 0.14), M.greyRock);
+      rock(new V3(-1.15, 0.04, 1.53), new V3(0.1, 0.08, 0.09), M.greyRock);
+      rock(new V3(0.45, 0.03, 1.76), new V3(0.08, 0.06, 0.08), M.rubble);
+      rock(new V3(-0.6, ground(-0.6) + 0.02, 1.62), new V3(0.07, 0.05, 0.07), M.rubble);
+
+      // Stone cart with a heap of gold, two blue wheels per side and a hole in the front.
+      {
+        const cart = new THREE.Group();
+        cart.position.set(1.41, 0, 0.39);
+        cart.rotation.y = THREE.MathUtils.degToRad(6.8);
+        model.add(cart);
+        const body = new THREE.BoxGeometry(0.66, 0.36, 0.66, 1, 1, 1);
+        const pos = body.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const f = pos.getY(i) > 0 ? 1.08 : 0.9;
+          pos.setXYZ(i, pos.getX(i) * f, pos.getY(i), pos.getZ(i) * f);
+        }
+        body.translate(0, 0.35, 0);
+        add(body, M.cart, { parent: cart });
+        // Thick rim band around the top, as wide as in the image (~0.1).
+        const half = 0.35;
+        for (const s of [1, -1]) {
+          const g1 = new THREE.BoxGeometry(2 * half + 0.1, 0.08, 0.1);
+          g1.translate(0, 0.53, s * half);
+          add(g1, M.cartRim, { parent: cart });
+          const g2 = new THREE.BoxGeometry(0.1, 0.08, 2 * half);
+          g2.translate(s * half, 0.53, 0);
+          add(g2, M.cartRim, { parent: cart });
+        }
+        for (const x of [-0.17, 0.17]) {
+          for (const s of [1, -1]) {
+            const w = new THREE.CylinderGeometry(0.15, 0.15, 0.08, 14);
+            w.rotateX(Math.PI / 2);
+            w.translate(x, 0.15, s * 0.33);
+            add(w, M.wheel, { parent: cart });
+            const hub = new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8);
+            hub.rotateX(Math.PI / 2);
+            hub.translate(x, 0.15, s * 0.34);
+            add(hub, M.hub, { parent: cart });
+          }
+        }
+        const hole = new THREE.CylinderGeometry(0.055, 0.055, 0.04, 12);
+        hole.rotateZ(Math.PI / 2);
+        hole.translate(0.335, 0.3, 0);
+        add(hole, M.hole, { parent: cart, cast: false });
+        const top = new THREE.Group();
+        cart.add(top);
+        goldHeap(top, 0.31, 0.31, 0.5, 0.17, 22, 0.075);
+      }
+
+      // Wooden crate overflowing with gold, and nuggets that fell out.
+      {
+        const crate = new THREE.Group();
+        crate.position.set(1.73, 0, -0.42);
+        crate.rotation.y = THREE.MathUtils.degToRad(-8.5);
+        model.add(crate);
+        const hx = 0.26;
+        const hz = 0.34;
+        const H = 0.43;
+        const box = new THREE.BoxGeometry(2 * hx - 0.04, H - 0.06, 2 * hz - 0.04);
+        box.translate(0, H / 2, 0);
+        add(box, M.crate, { parent: crate });
+        for (const sx of [1, -1]) {
+          for (const sz of [1, -1]) {
+            const p = new THREE.BoxGeometry(0.07, H, 0.07);
+            p.translate(sx * hx, H / 2, sz * hz);
+            add(p, M.cratePost, { parent: crate });
+          }
+          const r1 = new THREE.BoxGeometry(2 * hx + 0.02, 0.05, 0.06);
+          r1.translate(0, H - 0.02, sx * hz);
+          add(r1, M.crateRim, { parent: crate });
+          const r2 = new THREE.BoxGeometry(0.06, 0.05, 2 * hz + 0.02);
+          r2.translate(sx * hx, H - 0.02, 0);
+          add(r2, M.crateRim, { parent: crate });
+        }
+        goldHeap(crate, hx - 0.02, hz - 0.02, H - 0.04, 0.47, 28, 0.08);
+      }
+      for (const [x, z, s] of [[2.12, -0.41, 0.06], [2.18, -0.21, 0.055], [2.07, -0.04, 0.05], [1.78, 0.03, 0.05]]) nugget(new V3(x, s * 0.6, z), s);
+
+      // ------------------------------------------------------------------------------------------
+      // Scene, lights and the game camera.
+      // ------------------------------------------------------------------------------------------
+      const params = new URLSearchParams(location.search);
+      const shot = Number(params.get('shot')) || 0;
+      if (shot) document.documentElement.classList.add('shot');
 
       const stage = document.getElementById('stage');
+      let renderer;
       try {
-        const viewer = createViewer(stage, { radius: 2.5, target: [0.05, 0.3, 0] });
-        const mine = buildGoldMine();
-        viewer.scene.add(mine.object);
-        viewer.onFrame(mine.update);
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: !!shot });
       } catch (e) {
-        console.error(e);
         stage.innerHTML = '<p class="error">This browser cannot show 3D (WebGL is off or not supported).</p>';
+        throw e;
       }
+      renderer.setPixelRatio(shot ? 1 : Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      stage.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.add(model);
+      // Cool sky fill and warm sun/side light, like the image (left-facing sides neutral, right-facing warm).
+      scene.add(new THREE.HemisphereLight('#dfe8ff', '#3d3024', 1.6));
+      // Sun almost overhead, leaning toward +x: tops brightest, right-facing sides next, left-facing darkest.
+      const sun = new THREE.DirectionalLight('#fff3e2', 3.6);
+      sun.position.set(2.5, 9.7, 0.3);
+      sun.target.position.set(0.4, 0, 0.3);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      Object.assign(sun.shadow.camera, { left: -3, right: 3, top: 3, bottom: -3, near: 1, far: 20 });
+      sun.shadow.bias = -0.0006;
+      sun.shadow.normalBias = 0.015;
+      sun.shadow.radius = 4;
+      scene.add(sun, sun.target);
+      // Fill from the entrance side (+x), no shadow: right-facing sides come out brighter than left-facing ones.
+      const fill = new THREE.DirectionalLight('#ffdcc0', 2.0);
+      fill.position.set(8, 2.2, -1.2);
+      scene.add(fill);
+      // Soft shadow on the empty ground around the dirt (the image fades out there).
+      const catcher = new THREE.Mesh(new THREE.PlaneGeometry(4, 5), new THREE.ShadowMaterial({ opacity: 0.22, depthWrite: false }));
+      catcher.rotation.x = -Math.PI / 2;
+      catcher.position.set(2.4, 0.001, 0.4);
+      catcher.receiveShadow = true;
+      scene.add(catcher);
+
+      const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+      const forward = new V3(-Math.cos(REF.elev) / Math.SQRT2, -Math.sin(REF.elev), -Math.cos(REF.elev) / Math.SQRT2);
+      const right = new V3(1 / Math.SQRT2, 0, -1 / Math.SQRT2);
+      const upDir = right.clone().cross(forward);
+      // Point the image centre sits on: origin is at (92, 76), the centre at (94, 81).
+      const centre = right.clone().multiplyScalar((REF.w / 2 - REF.ox) / REF.k).addScaledVector(upDir, -(REF.h / 2 - REF.oy) / REF.k);
+      // Slide it along the view line next to the model's middle so orbiting pivots on the mine.
+      const middle = new V3(0.4, 0.6, 0.45);
+      centre.addScaledVector(forward, middle.clone().sub(centre).dot(forward));
+
+      const controls = shot ? null : new OrbitControls(camera, renderer.domElement);
+      if (controls) {
+        controls.enableDamping = true;
+        controls.enablePan = false;
+        controls.minZoom = 0.6;
+        controls.maxZoom = 4;
+        controls.maxPolarAngle = Math.PI * 0.48;
+      }
+      function gameView() {
+        camera.position.copy(centre).addScaledVector(forward, -20);
+        camera.up.copy(upDir);
+        camera.zoom = 1;
+        camera.lookAt(centre);
+        camera.updateProjectionMatrix();
+        if (controls) {
+          controls.target.copy(centre);
+          controls.update();
+        }
+      }
+      function fit() {
+        const w = shot ? REF.w * shot : Math.max(1, stage.clientWidth);
+        const h = shot ? REF.h * shot : Math.max(1, stage.clientHeight);
+        renderer.setSize(w, h);
+        // Pixels per unit: exactly the image's scale in shot mode, otherwise fill most of the screen.
+        const ppu = shot ? REF.k * shot : Math.min(w / (REF.w / REF.k), h / (REF.h / REF.k)) * 0.9;
+        Object.assign(camera, { left: -w / 2 / ppu, right: w / 2 / ppu, top: h / 2 / ppu, bottom: -h / 2 / ppu });
+        camera.updateProjectionMatrix();
+      }
+      gameView();
+      fit();
+      if (!shot) new ResizeObserver(fit).observe(stage);
+      document.getElementById('gameView').addEventListener('click', gameView);
+
+      document.getElementById('export').addEventListener('click', async () => {
+        const glb = await new GLTFExporter().parseAsync(model, { binary: true });
+        const url = URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' }));
+        const a = Object.assign(document.createElement('a'), { href: url, download: 'gold-mine-level-1.glb' });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      });
+
+      renderer.setAnimationLoop(() => {
+        controls?.update();
+        renderer.render(scene, camera);
+        if (shot) window.__ready = true;
+      });
     </script>
   </body>
 </html>

@@ -96,15 +96,23 @@ Logs: `journalctl -u coc-alerts -f`. Preview the alert times for an export witho
 
 ## 3D buildings (prototype)
 
-`/3d/gold-mine.html` shows a level 1 Gold Mine as a 3D model you can rotate and zoom. The model is
-built from code (`public/3d/js/gold-mine.js`): boxes, cylinders and low-poly shapes after the look
-of the game's image, with no game files used. `public/3d/js/viewer.js` sets up the grass island, the
-game's camera angle, lights, shadows and a turntable that pauses while you drag.
+`/3d/gold-mine.html` is a single HTML file that rebuilds the level 1 Gold Mine in 3D from the game
+image: drag to rotate, scroll to zoom, **Game view** returns to the image's angle and **Export GLB**
+downloads the model (`gold-mine-level-1.glb`, flat-shaded, no lights).
 
-These are plain browser modules, served as static files. Next.js does not bundle them. three.js r187
-is vendored in `public/vendor/three/` (MIT, see its `LICENSE`): `build/three.module.js` and
-`build/three.core.js` bundled into one file with `bun build --minify`, plus the `OrbitControls` and
-`RoomEnvironment` addons as published. The page maps `three` and `three/addons/` to them with an
+- The camera matches the 188 × 162 px game sprite: orthographic, down the tile diagonal, 43.5° above
+  the ground (measured from the cart rim), 40 px per unit. `atH(px, py, y)` turns a pixel of that
+  image into a world point, which is how the parts were placed.
+- Parts are beveled boxes and slabs (`ExtrudeGeometry`), cylinders, low-poly rocks and nuggets, and a
+  custom `BufferGeometry` for the dark tunnel inside. Colors start from the image's pixels and were
+  tuned until the render's colors matched the image region by region.
+- `?shot=4` renders 752 × 648 with a transparent background in exactly the image's framing, to
+  overlay the render on the sprite.
+
+The page is served as a static file; Next.js does not bundle it. three.js r187 is vendored in
+`public/vendor/three/` (MIT, see its `LICENSE`): `build/three.module.js` and `build/three.core.js`
+bundled into one file with `bun build --minify`, plus the `OrbitControls` and `GLTFExporter` addons
+as published. The page maps `three` and `three/addons/` to them with an
 import map.
 
 ## Where the data comes from
