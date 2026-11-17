@@ -169,6 +169,11 @@ import map.
   levels the data knows; levels past that count as maxed and new buildings are listed as not in our
   data. The Telegram bot still alerts for those new buildings, named by their id.
 
+  The picture of such a Town Hall can come straight from the wiki: list it in
+  `src/data/extra-town-halls.json` (hall level → wiki file, e.g. `"19": "Town_Hall19.png"`) and the
+  Game data workflow fetches it with `scripts/fetch-town-hall-images.mjs`, resized like the package's
+  pictures and saved where the package will put its own.
+
 ## How "time to max" is calculated
 
 `src/lib/planner.ts` turns the village into upgrade chains (each building instance, hero, troop… is

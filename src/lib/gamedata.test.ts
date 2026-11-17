@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import extraTownHalls from '@/data/extra-town-halls.json';
 import { MAX_BH, MAX_TH, countAt, hallsAheadOfData, itemByKey, townHallImage } from './gamedata';
 import { buildChains } from './planner';
 import { parseExport, villageFromExport } from './village';
@@ -10,10 +11,15 @@ describe('halls newer than the game data', () => {
     expect(hallsAheadOfData({ townHall: MAX_TH + 1, builderHall: MAX_BH + 1 })).toEqual([`Town Hall ${MAX_TH + 1}`, `Builder Hall ${MAX_BH + 1}`]);
   });
 
-  it('shows the newest Town Hall picture the data has', () => {
+  it('shows the Town Hall picture, or the newest one we have', () => {
     expect(townHallImage(10)).toBe('/game/home/town-hall/normal/level-10.webp');
     expect(townHallImage(MAX_TH)).toBe(`/game/home/town-hall/normal/level-${MAX_TH}.webp`);
-    expect(townHallImage(MAX_TH + 1)).toBe(townHallImage(MAX_TH));
+    // Halls fetched from the wiki ahead of the data use their own picture, before and after the data adds them.
+    for (const level of Object.keys(extraTownHalls)) {
+      expect(townHallImage(Number(level))).toBe(`/game/home/town-hall/normal/level-${level}.webp`);
+    }
+    const newest = Math.max(MAX_TH, ...Object.keys(extraTownHalls).map(Number));
+    expect(townHallImage(newest + 5)).toBe(townHallImage(MAX_TH));
     expect(townHallImage(0)).toBe('/game/home/town-hall/normal/level-1.webp');
   });
 
