@@ -2,6 +2,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ExternalLink } from 'lucide-react';
 import { formatCompact, formatNumber, tagSlug } from '@/lib/format';
+import { townHallImage } from '@/lib/gamedata';
 import type { ApiPlayer } from '@/lib/village';
 import { Badge } from './ui/display';
 
@@ -24,7 +25,7 @@ export function PlayerHeader({ player, demo }: { player: ApiPlayer; demo: boolea
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-4">
         <Image
-          src={`/game/home/town-hall/normal/level-${Math.min(player.townHallLevel, 18)}.webp`}
+          src={townHallImage(player.townHallLevel)}
           alt={`Town Hall ${player.townHallLevel}`}
           width={64}
           height={64}

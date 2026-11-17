@@ -132,6 +132,13 @@ import map.
   npm update clash-of-clans-data && npm run gamedata
   ```
 
+  A new Town Hall can reach the game before the package adds it (Town Hall 19: released 16 Nov 2026,
+  requested upstream in [issue #67](https://github.com/chiefpansancolt/clash-of-clans-data/issues/67)).
+  Until then, villages above the data's highest hall get a notice and are planned with the last
+  levels the data knows; levels past that count as maxed and new buildings are listed as not in our
+  data. `src/data/gamedata.json` already carries the 0.19.1 wall fix (325 walls at TH18), while
+  `package-lock.json` still pins 0.19.0, so run the command above rather than `npm run gamedata` alone.
+
 ## How "time to max" is calculated
 
 `src/lib/planner.ts` turns the village into upgrade chains (each building instance, hero, troop… is

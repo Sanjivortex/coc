@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronDown, FileUp, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, FileUp, SlidersHorizontal, TriangleAlert } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useNow, useStoredJson, useStoredString } from '@/lib/client-store';
-import { itemByKey } from '@/lib/gamedata';
+import { GAME_DATA_SOURCE, MAX_BH, MAX_TH, hallsAheadOfData, itemByKey } from '@/lib/gamedata';
 import { formatDay, formatPercent } from '@/lib/format';
 import {
   DAY,
@@ -112,9 +112,24 @@ export function Dashboard({ village, notice }: { village: Village; notice?: Reac
     jamOver ? 'Hammer Jam over' : `HJ ${formatDay(settings.hammerJam.start)}–${formatDay(settings.hammerJam.end)}`,
   ].join(' · ');
 
+  const ahead = hallsAheadOfData(village);
+
   return (
     <div>
       {notice}
+      {ahead.length > 0 && (
+        <div role="note" className="mb-3 flex gap-2.5 rounded-lg border border-warning/30 bg-warning/10 px-4 py-2.5 text-[13px] text-ink-2">
+          <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning" aria-hidden />
+          <p>
+            <span className="font-medium text-ink">
+              {ahead.join(' and ')} {ahead.length > 1 ? 'are' : 'is'} newer than our upgrade data
+            </span>{' '}
+            ({GAME_DATA_SOURCE}, up to Town Hall{' '}
+            {MAX_TH} and Builder Hall {MAX_BH}). Max levels, costs and times below stop at those halls, so newer levels count as maxed and new
+            buildings show as not in our data. This updates once the data adds them.
+          </p>
+        </div>
+      )}
       <div className="sticky top-14 z-20 -mx-4 bg-bg/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
         <Tabs label="Sections" tabs={tabs.map((t) => ({ ...t, count: t.count || undefined }))} value={tab} onChange={setTab} />
       </div>
