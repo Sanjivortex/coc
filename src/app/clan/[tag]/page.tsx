@@ -8,6 +8,7 @@ import { ApiError } from '@/components/ApiError';
 import { DEMO_TAG, getClan, type ApiClan } from '@/lib/coc-api';
 import { Badge, Panel } from '@/components/ui/display';
 import { formatNumber, normalizeTag, tagSlug } from '@/lib/format';
+import { townHallImage } from '@/lib/gamedata';
 
 const ROLE: Record<string, string> = { leader: 'Leader', coLeader: 'Co-Leader', admin: 'Elder', member: 'Member' };
 
@@ -123,7 +124,7 @@ function ClanView({ clan, demo }: { clan: ApiClan; demo: boolean }) {
                 </td>
                 <td className="px-2 py-2">
                   <span className="inline-flex items-center gap-2">
-                    <Image src={`/game/home/town-hall/normal/level-${Math.min(m.townHallLevel, 18)}.webp`} alt="" width={22} height={22} />
+                    <Image src={townHallImage(m.townHallLevel)} alt="" width={22} height={22} />
                     {m.townHallLevel}
                   </span>
                 </td>

@@ -148,6 +148,26 @@ export function hallOf(item: Item, village: { townHall: number; builderHall: num
   return item.base === 'home' ? village.townHall : village.builderHall;
 }
 
+/**
+ * Hall levels a village has that the game data does not cover yet, e.g. a Town Hall Supercell just
+ * released. Such villages are planned with the last levels the data knows.
+ */
+export function hallsAheadOfData(village: { townHall: number; builderHall: number }): string[] {
+  const ahead: string[] = [];
+  if (village.townHall > MAX_TH) ahead.push(`Town Hall ${village.townHall}`);
+  if (village.builderHall > MAX_BH) ahead.push(`Builder Hall ${village.builderHall}`);
+  return ahead;
+}
+
+const TOWN_HALL_ITEM = itemByDataId(1000001);
+
+/** Town Hall picture for a level; a level newer than the data shows the newest picture it has. */
+export function townHallImage(level: number): string {
+  const levels = TOWN_HALL_ITEM?.lv ?? [];
+  const i = Math.max(1, Math.min(Math.round(level) || 1, levels.length)) - 1;
+  return levels[i]?.img ?? TOWN_HALL_ITEM?.icon ?? '/game/home/town-hall/normal/level-1.webp';
+}
+
 export const KIND_LABEL: Record<Kind, string> = {
   defense: 'Defenses',
   trap: 'Traps',
