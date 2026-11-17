@@ -9,6 +9,10 @@
 # Re-running updates the code, rebuilds and restarts. The only change to Caddy is one new site
 # block appended to the Caddyfile, after a backup and `caddy validate`, so existing sites keep working.
 # Node.js 22 is installed privately in /opt/coc-node; other apps keep their own Node version.
+#
+# It also turns on auto-deploy: every minute the coc-update timer checks GitHub, and a new commit on
+# the branch goes live once it builds (deploy/update.sh). AUTO_DEPLOY=0 turns that off. Run this
+# script again after changing anything in deploy/, since the installed updater is a copy.
 set -euo pipefail
 
 CHECK_ONLY=0
@@ -24,6 +28,7 @@ APP_USER="${APP_USER:-coc}"
 SERVICE="${SERVICE:-coc}"
 NODE_DIR="${NODE_DIR:-/opt/coc-node}"
 CADDYFILE="${CADDYFILE:-/etc/caddy/Caddyfile}"
+AUTO_DEPLOY="${AUTO_DEPLOY:-1}"
 UNIT="/etc/systemd/system/$SERVICE.service"
 ENV_FILE="$APP_DIR/.env.local"
 
@@ -82,9 +87,13 @@ fi
 
 command -v apt-get >/dev/null || die "Only Ubuntu/Debian are supported."
 
+# Wait for an auto-deploy that is running right now, and keep the next one out until we are done.
+exec 9>"/run/$SERVICE-update.lock"
+flock 9
+
 log "System packages"
 missing=()
-for p in git curl ca-certificates xz-utils; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
+for p in git curl ca-certificates xz-utils rsync; do dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p"); done
 if [ "${#missing[@]}" -gt 0 ]; then
   apt-get update -qq
   apt-get install -y -qq "${missing[@]}"
@@ -283,6 +292,46 @@ EOF
   echo "  running (logs: journalctl -u $ALERTS_SERVICE -f)"
 fi
 
+UPDATE_SERVICE="$SERVICE-update"
+UPDATER="/usr/local/sbin/$UPDATE_SERVICE"
+log "Auto-deploy from GitHub"
+if [ "$AUTO_DEPLOY" = "1" ]; then
+  # A root-owned copy: automatic runs never execute code fetched from GitHub as root.
+  install -m 755 -o root -g root "$APP_DIR/deploy/update.sh" "$UPDATER"
+  cat >"/etc/systemd/system/$UPDATE_SERVICE.service" <<EOF
+[Unit]
+Description=CoC Stats: deploy new commits from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=$APP_DIR APP_USER=$APP_USER SERVICE=$SERVICE NODE_DIR=$NODE_DIR BRANCH=$BRANCH
+ExecStart=$UPDATER
+TimeoutStartSec=30min
+Nice=10
+EOF
+  cat >"/etc/systemd/system/$UPDATE_SERVICE.timer" <<EOF
+[Unit]
+Description=CoC Stats: check GitHub for new commits every minute
+
+[Timer]
+OnCalendar=minutely
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now "$UPDATE_SERVICE.timer" >/dev/null 2>&1
+  echo "  on: a new commit on $BRANCH goes live a few minutes after it is pushed (logs: journalctl -u $UPDATE_SERVICE -f)"
+elif [ -f "/etc/systemd/system/$UPDATE_SERVICE.timer" ]; then
+  systemctl disable --now "$UPDATE_SERVICE.timer" >/dev/null 2>&1 || true
+  echo "  off (AUTO_DEPLOY=0)"
+else
+  echo "  off (AUTO_DEPLOY=0)"
+fi
+
 log "Caddy"
 if ! command -v caddy >/dev/null || [ ! -f "$CADDYFILE" ]; then
   warn "No Caddy service config at $CADDYFILE. Add this block to your Caddy config and reload Caddy:"
@@ -309,5 +358,9 @@ list_sites
 
 log "Done: https://$DOMAIN"
 check_dns
-echo "  Update later: run the same command again."
+if [ "$AUTO_DEPLOY" = "1" ]; then
+  echo "  Updates: automatic from GitHub $BRANCH. Run this command again only after changing deploy/."
+else
+  echo "  Update later: run the same command again."
+fi
 echo "  Logs: journalctl -u $SERVICE -f"

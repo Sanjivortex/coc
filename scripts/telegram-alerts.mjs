@@ -72,9 +72,12 @@ async function gameInfo() {
   const data = JSON.parse(await readFile(path.join(ROOT, 'src', 'data', 'gamedata.json'), 'utf8'));
   game = new Map();
   for (const item of data.items) {
-    if (item.base !== 'home' || item.queue !== 'builder') continue;
-    if (item.dataId !== null) game.set(item.dataId, { name: item.name, levels: item.lv ?? [] });
-    for (const m of item.modules ?? []) if (m.dataId !== null) game.set(m.dataId, { name: `${item.name} ${m.name}`, levels: m.lv ?? [] });
+    if (item.base !== 'home') continue;
+    // Items other builders don't work on (walls, helpers) are kept too, marked, so they are skipped
+    // rather than treated as unknown.
+    const builder = item.queue === 'builder';
+    if (item.dataId !== null) game.set(item.dataId, { name: item.name, levels: item.lv ?? [], builder });
+    for (const m of item.modules ?? []) if (m.dataId !== null) game.set(m.dataId, { name: `${item.name} ${m.name}`, levels: m.lv ?? [], builder });
   }
   return game;
 }
@@ -105,8 +108,11 @@ export function builderUpgrades(ex, infoMap, boosts = exportBoosts(ex)) {
   const seen = new Map();
   const th = (ex.buildings ?? []).find((b) => b.data === 1000001)?.lvl ?? 0;
   const add = (id, level, timer) => {
-    const it = infoMap.get(id);
-    if (!it || typeof timer !== 'number' || timer <= 0) return;
+    const known = infoMap.get(id);
+    if (known?.builder === false || typeof timer !== 'number' || timer <= 0) return;
+    // A timer in these sections is builder work even when the game data does not know the item yet,
+    // e.g. a building from a Town Hall that just came out.
+    const it = known ?? { name: `New building #${id}`, levels: [] };
     const base = `${id}:${level}`;
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);

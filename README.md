@@ -61,6 +61,31 @@ Caddyfile is put back. Caddy then gets the HTTPS certificate on its own.
 
 Logs: `journalctl -u coc -f`. If the build gets killed on a 1 GB VPS, add swap and run it again.
 
+### Auto-deploy
+
+The setup script also installs the `coc-update` timer: every minute the VPS asks GitHub for the
+latest commit on `main`, and a new one goes live a few minutes after it is pushed or merged, with no
+command to run. [`deploy/update.sh`](deploy/update.sh):
+
+1. builds the commit in `/opt/coc-build` as the `coc` user (`npm ci` only when `package-lock.json`
+   changed),
+2. only if the build passes, copies it over `/opt/coc` (keeping `.env.local` and `.data/`) and
+   restarts `coc` and `coc-alerts`,
+3. sends a Telegram message (when the bot is set up): updated, or failed with the old site still
+   running. A commit that fails to build is not tried again; the next commit is.
+
+The updater runs from a root-owned copy in `/usr/local/sbin/coc-update`, so code from GitHub never
+runs as root on the VPS. Run the setup command again after changing anything in `deploy/`.
+
+```bash
+journalctl -u coc-update -f                # watch deploys
+systemctl start coc-update                 # check now instead of at the next minute
+systemctl disable --now coc-update.timer   # turn it off (or run the setup with AUTO_DEPLOY=0)
+```
+
+[`ci.yml`](.github/workflows/ci.yml) runs the tests, lint and the production build on every pull
+request and push to `main`, then serves the build from another folder the way the VPS does.
+
 ### Telegram builder alerts
 
 A Telegram message 10 minutes before a home-village builder is free, for one account:
@@ -132,12 +157,17 @@ import map.
   npm update clash-of-clans-data && npm run gamedata
   ```
 
+  [`game-data.yml`](.github/workflows/game-data.yml) does this by itself: every hour it checks npm,
+  and when there is a newer release it regenerates the data, runs the tests and the build, and
+  pushes the result to `main`, which the VPS then deploys. Run it by hand from the Actions tab
+  (**Game data → Run workflow**). The package's install scripts are skipped; the generator only reads
+  its JSON and images.
+
   A new Town Hall can reach the game before the package adds it (Town Hall 19: released 16 Nov 2026,
   requested upstream in [issue #67](https://github.com/chiefpansancolt/clash-of-clans-data/issues/67)).
   Until then, villages above the data's highest hall get a notice and are planned with the last
   levels the data knows; levels past that count as maxed and new buildings are listed as not in our
-  data. `src/data/gamedata.json` already carries the 0.19.1 wall fix (325 walls at TH18), while
-  `package-lock.json` still pins 0.19.0, so run the command above rather than `npm run gamedata` alone.
+  data. The Telegram bot still alerts for those new buildings, named by their id.
 
 ## How "time to max" is calculated
 
