@@ -1,0 +1,88 @@
+name: Game data
+
+# Every hour: when clash-of-clans-data has a newer release on npm (for example once it adds Town
+# Hall 19), regenerate src/data/gamedata.json and public/game/, run the tests and the production
+# build, and push the result to main. The VPS then deploys main by itself (deploy/update.sh).
+# On a pull request that changes this file or the generator, it does all of that except the push.
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/game-data.yml
+      - scripts/build-gamedata.mjs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: game-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Look for a newer clash-of-clans-data
+        id: check
+        run: |
+          current=$(node -p "require('./package-lock.json').packages['node_modules/clash-of-clans-data'].version")
+          latest=$(npm view clash-of-clans-data version)
+          echo "installed $current, latest on npm $latest"
+          if ! [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected version from npm: $latest"
+            exit 1
+          fi
+          newest=$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n 1)
+          # Pull requests always run the generator, to test it.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] || { [ "$latest" != "$current" ] && [ "$newest" = "$latest" ]; }; then
+            echo "update=true" >>"$GITHUB_OUTPUT"
+            echo "version=$latest" >>"$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.update == 'true'
+        run: npm ci --no-audit --no-fund
+
+      # The package is data only: scripts/build-gamedata.mjs reads its JSON and images and never
+      # runs its code, so its install scripts are skipped.
+      - name: Install the new data and regenerate
+        if: steps.check.outputs.update == 'true'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          npm install --save-dev --ignore-scripts --no-audit --no-fund "clash-of-clans-data@$VERSION"
+          npm run gamedata
+          git status --short | head -n 40
+          git diff --shortstat
+
+      - if: steps.check.outputs.update == 'true'
+        run: npm test
+
+      - if: steps.check.outputs.update == 'true'
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Push to main
+        if: steps.check.outputs.update == 'true' && github.event_name != 'pull_request'
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: |
+          git add package.json package-lock.json src/data/gamedata.json public/game
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q -m "Update game data to clash-of-clans-data $VERSION" \
+            -m "Regenerated src/data/gamedata.json and public/game/ with npm run gamedata. Tests and the production build passed."
+          git push origin HEAD:main

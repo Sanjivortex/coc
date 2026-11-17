@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      # The VPS builds in /opt/coc-build and serves the copy in /opt/coc (deploy/update.sh). Do the
+      # same here: copy the build elsewhere, move the original out of the way, and load the pages.
+      - name: Serve the build from another folder
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+        run: |
+          app="$RUNNER_TEMP/app"
+          rsync -a --delete --exclude=/.git/ ./ "$app/"
+          mv .next "$RUNNER_TEMP/original-next"
+          cd "$app"
+          npx next start -H 127.0.0.1 -p 3900 >"$RUNNER_TEMP/next.log" 2>&1 &
+          for _ in $(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:3900/ && break; sleep 1; done
+          status=0
+          for page in / /tracker /player/DEMO /clan/DEMO /3d/gold-mine.html; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3900$page")
+            echo "$code $page"
+            [ "$code" = 200 ] || status=1
+          done
+          if [ "$status" != 0 ]; then cat "$RUNNER_TEMP/next.log"; fi
+          exit "$status"
