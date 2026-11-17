@@ -13,6 +13,8 @@ on:
     paths:
       - .github/workflows/game-data.yml
       - scripts/build-gamedata.mjs
+      - scripts/fetch-town-hall-images.mjs
+      - src/data/extra-town-halls.json
 
 permissions:
   contents: write
@@ -49,7 +51,18 @@ jobs:
             echo "version=$latest" >>"$GITHUB_OUTPUT"
           fi
 
-      - if: steps.check.outputs.update == 'true'
+      # Town Hall pictures from the wiki for halls the package does not have yet
+      # (src/data/extra-town-halls.json).
+      - name: Look for missing Town Hall pictures
+        id: images
+        run: |
+          missing=$(node scripts/fetch-town-hall-images.mjs --missing)
+          echo "missing: ${missing:-none}"
+          if [ -n "$missing" ] || [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo "fetch=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.check.outputs.update == 'true' || steps.images.outputs.fetch == 'true'
         run: npm ci --no-audit --no-fund
 
       # The package is data only: scripts/build-gamedata.mjs reads its JSON and images and never
@@ -64,6 +77,12 @@ jobs:
           git status --short | head -n 40
           git diff --shortstat
 
+      # After the regeneration, so a hall the package now has keeps the package's picture.
+      # On a pull request it fetches every picture again and prints it, to check it.
+      - name: Fetch Town Hall pictures the data does not have yet
+        if: steps.images.outputs.fetch == 'true'
+        run: node scripts/fetch-town-hall-images.mjs $([ "$GITHUB_EVENT_NAME" = pull_request ] && echo --force --print)
+
       - if: steps.check.outputs.update == 'true'
         run: npm test
 
@@ -73,7 +92,7 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
 
       - name: Push to main
-        if: steps.check.outputs.update == 'true' && github.event_name != 'pull_request'
+        if: (steps.check.outputs.update == 'true' || steps.images.outputs.fetch == 'true') && github.event_name != 'pull_request'
         env:
           VERSION: ${{ steps.check.outputs.version }}
         run: |
@@ -82,7 +101,13 @@ jobs:
             echo "Nothing changed."
             exit 0
           fi
+          if [ -n "$VERSION" ]; then
+            title="Update game data to clash-of-clans-data $VERSION"
+            body="Regenerated src/data/gamedata.json and public/game/ with npm run gamedata. Tests and the production build passed."
+          else
+            title="Add Town Hall pictures from the Clash of Clans Wiki"
+            body="Fetched with scripts/fetch-town-hall-images.mjs for halls clash-of-clans-data does not have yet."
+          fi
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
-            commit -q -m "Update game data to clash-of-clans-data $VERSION" \
-            -m "Regenerated src/data/gamedata.json and public/game/ with npm run gamedata. Tests and the production build passed."
+            commit -q -m "$title" -m "$body"
           git push origin HEAD:main

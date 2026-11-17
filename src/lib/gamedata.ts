@@ -1,3 +1,4 @@
+import extraTownHalls from '@/data/extra-town-halls.json';
 import raw from '@/data/gamedata.json';
 
 export type Base = 'home' | 'builder';
@@ -161,11 +162,16 @@ export function hallsAheadOfData(village: { townHall: number; builderHall: numbe
 
 const TOWN_HALL_ITEM = itemByDataId(1000001);
 
-/** Town Hall picture for a level; a level newer than the data shows the newest picture it has. */
+/**
+ * Town Hall picture for a level. A hall newer than the data uses the picture fetched from the wiki
+ * ahead of the package (src/data/extra-town-halls.json, scripts/fetch-town-hall-images.mjs), else the
+ * newest picture the data has.
+ */
 export function townHallImage(level: number): string {
   const levels = TOWN_HALL_ITEM?.lv ?? [];
-  const i = Math.max(1, Math.min(Math.round(level) || 1, levels.length)) - 1;
-  return levels[i]?.img ?? TOWN_HALL_ITEM?.icon ?? '/game/home/town-hall/normal/level-1.webp';
+  const n = Math.max(1, Math.round(level) || 1);
+  if (n > levels.length && String(n) in extraTownHalls) return `/game/home/town-hall/normal/level-${n}.webp`;
+  return levels[Math.min(n, levels.length) - 1]?.img ?? TOWN_HALL_ITEM?.icon ?? '/game/home/town-hall/normal/level-1.webp';
 }
 
 export const KIND_LABEL: Record<Kind, string> = {
